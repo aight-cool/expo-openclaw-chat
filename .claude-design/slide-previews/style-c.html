@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Style C: Electric Midnight</title>
+    <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@700,800&f[]=satoshi@400,500&display=swap">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body { height: 100%; overflow: hidden; }
+
+        body {
+            font-family: 'Satoshi', sans-serif;
+            background: #000000;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            position: relative;
+        }
+
+        /* Gradient mesh background */
+        .bg-gradient {
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(ellipse at 30% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, rgba(6, 182, 212, 0.12) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(168, 85, 247, 0.05) 0%, transparent 70%);
+            pointer-events: none;
+            animation: breathe 8s ease-in-out infinite;
+        }
+
+        @keyframes breathe {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        /* Noise texture overlay */
+        .noise {
+            position: absolute;
+            inset: 0;
+            opacity: 0.03;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            pointer-events: none;
+        }
+
+        .content {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            padding: clamp(1.5rem, 4vw, 4rem);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5em;
+            font-size: clamp(0.6rem, 1vw, 0.75rem);
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.5);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-bottom: clamp(1.5rem, 3vw, 3rem);
+            opacity: 0;
+            animation: fadeUp 0.7s 0.2s forwards;
+        }
+
+        .badge .dot {
+            width: 6px;
+            height: 6px;
+            background: #06b6d4;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #06b6d4;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 8px #06b6d4; }
+            50% { opacity: 0.5; box-shadow: 0 0 16px #06b6d4; }
+        }
+
+        h1 {
+            font-family: 'Cabinet Grotesk', sans-serif;
+            font-size: clamp(2.5rem, 8vw, 6.5rem);
+            font-weight: 800;
+            line-height: 0.95;
+            letter-spacing: -0.05em;
+            margin-bottom: clamp(0.75rem, 2vw, 1.5rem);
+        }
+
+        .word-1, .word-2, .word-3 {
+            display: block;
+            opacity: 0;
+        }
+
+        .word-1 {
+            color: rgba(255, 255, 255, 0.4);
+            animation: fadeUp 0.7s 0.4s forwards;
+        }
+
+        .word-2 {
+            background: linear-gradient(135deg, #818cf8, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: fadeUp 0.7s 0.6s forwards;
+        }
+
+        .word-3 {
+            animation: fadeUp 0.7s 0.8s forwards;
+        }
+
+        .subtitle {
+            font-size: clamp(0.85rem, 1.5vw, 1.15rem);
+            color: rgba(255, 255, 255, 0.35);
+            font-weight: 400;
+            max-width: 450px;
+            margin: 0 auto;
+            line-height: 1.5;
+            opacity: 0;
+            animation: fadeUp 0.7s 1s forwards;
+        }
+
+        .author-row {
+            margin-top: clamp(2rem, 4vw, 3.5rem);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            opacity: 0;
+            animation: fadeUp 0.7s 1.2s forwards;
+        }
+
+        .author-name {
+            font-weight: 500;
+            font-size: clamp(0.75rem, 1.1vw, 0.9rem);
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .author-sep {
+            width: 24px;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .author-role {
+            font-size: clamp(0.65rem, 0.9vw, 0.8rem);
+            color: rgba(255, 255, 255, 0.3);
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(25px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-gradient"></div>
+    <div class="noise"></div>
+    <div class="content">
+        <div class="badge"><span class="dot"></span> Expo Event 2026</div>
+        <h1>
+            <span class="word-1">The App</span>
+            <span class="word-2">That Builds</span>
+            <span class="word-3">Itself</span>
+        </h1>
+        <p class="subtitle">Embed AI into your Expo app. Fix bugs from your phone. Ship without a laptop.</p>
+        <div class="author-row">
+            <span class="author-name">Bruno Barbieri</span>
+            <span class="author-sep"></span>
+            <span class="author-role">@brunobar79</span>
+        </div>
+    </div>
+</body>
+</html>

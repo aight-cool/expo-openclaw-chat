@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Style A: Neon Terminal</title>
+    <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=jetbrains-mono@400&f[]=satoshi@500,700,900&display=swap">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body { height: 100%; overflow: hidden; }
+
+        body {
+            font-family: 'Satoshi', sans-serif;
+            background: #0a0e14;
+            color: #e6e6e6;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            position: relative;
+        }
+
+        /* Subtle grid background */
+        body::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(0, 255, 180, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 180, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+        }
+
+        /* Gradient glow */
+        body::after {
+            content: '';
+            position: absolute;
+            top: -20%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(ellipse, rgba(0, 255, 180, 0.08) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .content {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            padding: clamp(1.5rem, 4vw, 4rem);
+        }
+
+        .tag {
+            display: inline-block;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: clamp(0.65rem, 1.2vw, 0.85rem);
+            color: #00ffb4;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-bottom: clamp(1rem, 2vw, 2rem);
+            padding: 0.4em 1.2em;
+            border: 1px solid rgba(0, 255, 180, 0.25);
+            border-radius: 100px;
+            opacity: 0;
+            animation: fadeUp 0.8s 0.3s forwards;
+        }
+
+        h1 {
+            font-size: clamp(2rem, 6vw, 5rem);
+            font-weight: 900;
+            line-height: 1.05;
+            letter-spacing: -0.03em;
+            margin-bottom: clamp(0.5rem, 1.5vw, 1.5rem);
+            opacity: 0;
+            animation: fadeUp 0.8s 0.5s forwards;
+        }
+
+        h1 .accent {
+            color: #00ffb4;
+            text-shadow: 0 0 40px rgba(0, 255, 180, 0.3);
+        }
+
+        .subtitle {
+            font-size: clamp(0.85rem, 1.8vw, 1.3rem);
+            color: #7a8a9e;
+            font-weight: 500;
+            opacity: 0;
+            animation: fadeUp 0.8s 0.7s forwards;
+        }
+
+        .author {
+            margin-top: clamp(1.5rem, 3vw, 3rem);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: clamp(0.65rem, 1vw, 0.8rem);
+            color: #4a5568;
+            opacity: 0;
+            animation: fadeUp 0.8s 0.9s forwards;
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1em;
+            background: #00ffb4;
+            margin-left: 4px;
+            vertical-align: text-bottom;
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="content">
+        <div class="tag">Expo Event 2026</div>
+        <h1>The App That<br><span class="accent">Builds Itself</span></h1>
+        <p class="subtitle">AI-powered development from inside your Expo app</p>
+        <p class="author">Bruno Barbieri &middot; @brunobar79<span class="cursor"></span></p>
+    </div>
+</body>
+</html>

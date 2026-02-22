@@ -1,0 +1,1658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The App That Builds Itself — Bruno Barbieri</title>
+
+    <!-- Fonts: JetBrains Mono for code/accents, Satoshi for everything else -->
+    <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=jetbrains-mono@400,500&f[]=satoshi@400,500,700,900&display=swap">
+
+    <style>
+        /* ===========================================
+           CSS CUSTOM PROPERTIES (THEME)
+           Electric Lime on Dark — Neon Terminal style
+           =========================================== */
+        :root {
+            /* Colors */
+            --bg-primary: #0a0e14;
+            --bg-secondary: #0f1319;
+            --bg-card: #141a22;
+            --text-primary: #e8e8e8;
+            --text-secondary: #6b7a8d;
+            --text-muted: #3d4a5c;
+            --accent: #ccff00;
+            --accent-dim: rgba(204, 255, 0, 0.15);
+            --accent-glow: rgba(204, 255, 0, 0.25);
+            --accent-secondary: #a0e000;
+            --code-bg: #0d1117;
+            --code-border: rgba(204, 255, 0, 0.08);
+
+            /* Syntax highlighting */
+            --syn-keyword: #ff7b72;
+            --syn-string: #a5d6ff;
+            --syn-func: #d2a8ff;
+            --syn-comment: #4a5568;
+            --syn-type: #79c0ff;
+            --syn-property: #ffa657;
+            --syn-tag: #7ee787;
+
+            /* Typography — clamp() for responsive scaling */
+            --font-display: 'Satoshi', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            --title-size: clamp(2rem, 6vw, 5rem);
+            --h2-size: clamp(1.5rem, 4vw, 3rem);
+            --h3-size: clamp(1.1rem, 2.5vw, 1.6rem);
+            --body-size: clamp(0.8rem, 1.4vw, 1.1rem);
+            --small-size: clamp(0.65rem, 1vw, 0.85rem);
+            --code-size: clamp(0.6rem, 1.1vw, 0.85rem);
+
+            /* Spacing — viewport-relative */
+            --slide-padding: clamp(1.5rem, 5vw, 5rem);
+            --content-gap: clamp(0.75rem, 2vw, 2rem);
+            --element-gap: clamp(0.4rem, 1vw, 1rem);
+
+            /* Animation */
+            --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+            --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+            --duration: 0.7s;
+        }
+
+        /* ===========================================
+           RESET & BASE
+           =========================================== */
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            height: 100%;
+            scroll-snap-type: y mandatory;
+            scroll-behavior: smooth;
+            overflow-x: hidden;
+        }
+
+        body {
+            font-family: var(--font-display);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100%;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ===========================================
+           GRID BACKGROUND — subtle terminal grid
+           =========================================== */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(204, 255, 0, 0.015) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(204, 255, 0, 0.015) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ===========================================
+           SLIDE CONTAINER
+           Each slide = exact viewport height. No scrolling.
+           =========================================== */
+        .slide {
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            scroll-snap-align: start;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+            padding: var(--slide-padding);
+        }
+
+        .slide-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            max-height: 100%;
+            overflow: hidden;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ===========================================
+           PROGRESS BAR
+           =========================================== */
+        .progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 3px;
+            background: var(--accent);
+            box-shadow: 0 0 10px var(--accent-glow);
+            z-index: 100;
+            transition: width 0.3s ease;
+        }
+
+        /* ===========================================
+           NAVIGATION DOTS
+           =========================================== */
+        .nav-dots {
+            position: fixed;
+            right: clamp(0.75rem, 2vw, 1.5rem);
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 100;
+        }
+
+        .nav-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+            padding: 0;
+        }
+
+        .nav-dot.active {
+            background: var(--accent);
+            box-shadow: 0 0 8px var(--accent-glow);
+            transform: scale(1.3);
+        }
+
+        .nav-dot:hover {
+            background: var(--accent);
+        }
+
+        /* ===========================================
+           SLIDE NUMBER
+           =========================================== */
+        .slide-number {
+            position: fixed;
+            bottom: clamp(0.75rem, 2vw, 1.5rem);
+            right: clamp(0.75rem, 2vw, 1.5rem);
+            font-family: var(--font-mono);
+            font-size: var(--small-size);
+            color: var(--text-muted);
+            z-index: 100;
+        }
+
+        /* ===========================================
+           TYPOGRAPHY
+           =========================================== */
+        h1 {
+            font-size: var(--title-size);
+            font-weight: 900;
+            line-height: 1.05;
+            letter-spacing: -0.04em;
+        }
+
+        h2 {
+            font-size: var(--h2-size);
+            font-weight: 900;
+            line-height: 1.1;
+            letter-spacing: -0.03em;
+        }
+
+        h3 {
+            font-size: var(--h3-size);
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        p, li {
+            font-size: var(--body-size);
+            line-height: 1.6;
+            color: var(--text-secondary);
+        }
+
+        .accent { color: var(--accent); }
+
+        .mono {
+            font-family: var(--font-mono);
+            font-size: 0.9em;
+        }
+
+        .tag {
+            display: inline-block;
+            font-family: var(--font-mono);
+            font-size: var(--small-size);
+            color: var(--accent);
+            letter-spacing: 0.12em;
+            text-transform: none;
+            padding: 0.35em 1em;
+            border: 1px solid rgba(204, 255, 0, 0.2);
+            border-radius: 100px;
+            margin-bottom: var(--content-gap);
+        }
+
+        /* ===========================================
+           REVEAL ANIMATIONS
+           Elements start hidden, revealed when slide is .visible
+           =========================================== */
+        .reveal {
+            opacity: 0;
+            transform: translateY(25px);
+            transition: opacity var(--duration) var(--ease-out-expo),
+                        transform var(--duration) var(--ease-out-expo);
+        }
+
+        .slide.visible .reveal {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Stagger delays */
+        .slide.visible .reveal:nth-child(1) { transition-delay: 0.05s; }
+        .slide.visible .reveal:nth-child(2) { transition-delay: 0.15s; }
+        .slide.visible .reveal:nth-child(3) { transition-delay: 0.25s; }
+        .slide.visible .reveal:nth-child(4) { transition-delay: 0.35s; }
+        .slide.visible .reveal:nth-child(5) { transition-delay: 0.45s; }
+        .slide.visible .reveal:nth-child(6) { transition-delay: 0.55s; }
+        .slide.visible .reveal:nth-child(7) { transition-delay: 0.65s; }
+        .slide.visible .reveal:nth-child(8) { transition-delay: 0.75s; }
+
+        /* Alternative reveal styles */
+        .reveal-scale {
+            opacity: 0;
+            transform: scale(0.92);
+            transition: opacity var(--duration) var(--ease-out-expo),
+                        transform var(--duration) var(--ease-out-expo);
+        }
+
+        .slide.visible .reveal-scale {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .reveal-left {
+            opacity: 0;
+            transform: translateX(-30px);
+            transition: opacity var(--duration) var(--ease-out-expo),
+                        transform var(--duration) var(--ease-out-expo);
+        }
+
+        .slide.visible .reveal-left {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        /* ===========================================
+           CODE BLOCKS
+           Syntax-highlighted code with terminal feel
+           =========================================== */
+        .code-block {
+            background: var(--code-bg);
+            border: 1px solid var(--code-border);
+            border-radius: 10px;
+            padding: clamp(0.75rem, 2vw, 1.5rem);
+            overflow: hidden;
+            max-width: min(90vw, 750px);
+        }
+
+        .code-block .window-dots {
+            display: flex;
+            gap: 6px;
+            margin-bottom: clamp(0.5rem, 1vw, 1rem);
+        }
+
+        .code-block .window-dots span {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .code-block .window-dots span:nth-child(1) { background: #ff5f57; }
+        .code-block .window-dots span:nth-child(2) { background: #ffbd2e; }
+        .code-block .window-dots span:nth-child(3) { background: #28c840; }
+
+        .code-block pre {
+            font-family: var(--font-mono);
+            font-size: var(--code-size);
+            line-height: 1.6;
+            color: #e6edf3;
+            white-space: pre;
+            overflow: hidden;
+        }
+
+        /* Syntax tokens */
+        .kw { color: var(--syn-keyword); }
+        .str { color: var(--syn-string); }
+        .fn { color: var(--syn-func); }
+        .cm { color: var(--syn-comment); }
+        .tp { color: var(--syn-type); }
+        .prop { color: var(--syn-property); }
+        .tag-s { color: var(--syn-tag); }
+
+        /* ===========================================
+           CARDS & LAYOUT COMPONENTS
+           =========================================== */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+            gap: clamp(0.5rem, 1.5vw, 1rem);
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid rgba(204, 255, 0, 0.06);
+            border-radius: 12px;
+            padding: clamp(0.75rem, 2vw, 1.25rem);
+        }
+
+        .card .card-icon {
+            font-size: clamp(1.2rem, 2.5vw, 1.8rem);
+            margin-bottom: var(--element-gap);
+        }
+
+        .card h3 {
+            font-size: clamp(0.85rem, 1.5vw, 1.1rem);
+            margin-bottom: 0.3em;
+        }
+
+        .card p {
+            font-size: var(--small-size);
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        /* Flow / Steps */
+        .flow {
+            display: flex;
+            align-items: center;
+            gap: clamp(0.3rem, 1vw, 0.75rem);
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .flow-step {
+            background: var(--bg-card);
+            border: 1px solid rgba(204, 255, 0, 0.08);
+            border-radius: 10px;
+            padding: clamp(0.4rem, 1vw, 0.75rem) clamp(0.6rem, 1.5vw, 1.25rem);
+            font-size: var(--small-size);
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .flow-arrow {
+            color: var(--accent);
+            font-size: clamp(0.8rem, 1.5vw, 1.2rem);
+            flex-shrink: 0;
+        }
+
+        /* Big quote */
+        .big-quote {
+            font-size: clamp(1.3rem, 3.5vw, 2.8rem);
+            font-weight: 900;
+            line-height: 1.15;
+            letter-spacing: -0.03em;
+            max-width: 800px;
+        }
+
+        .big-quote .accent {
+            text-shadow: 0 0 30px var(--accent-glow);
+        }
+
+        /* Bullet list */
+        .bullet-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.3rem, 0.8vw, 0.6rem);
+        }
+
+        .bullet-list li {
+            padding-left: 1.5em;
+            position: relative;
+            font-size: var(--body-size);
+        }
+
+        .bullet-list li::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0.55em;
+            width: 6px;
+            height: 6px;
+            background: var(--accent);
+            border-radius: 50%;
+            box-shadow: 0 0 6px var(--accent-glow);
+        }
+
+        /* Timeline */
+        .timeline {
+            display: flex;
+            gap: clamp(0.5rem, 2vw, 2rem);
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+
+        .timeline-item {
+            flex: 1;
+            min-width: 120px;
+            position: relative;
+            padding-top: clamp(0.5rem, 1vw, 1rem);
+            border-top: 2px solid var(--text-muted);
+        }
+
+        .timeline-item.active {
+            border-top-color: var(--accent);
+        }
+
+        .timeline-item .year {
+            font-family: var(--font-mono);
+            font-size: var(--small-size);
+            color: var(--accent);
+            margin-bottom: 0.3em;
+        }
+
+        .timeline-item .role {
+            font-size: var(--small-size);
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.2em;
+        }
+
+        .timeline-item .company {
+            font-size: var(--small-size);
+            color: var(--text-muted);
+        }
+
+        /* Center-aligned layout */
+        .centered {
+            text-align: center;
+            align-items: center;
+        }
+
+        /* Two-column layout */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: clamp(1rem, 3vw, 3rem);
+            align-items: center;
+        }
+
+        @media (max-width: 768px) {
+            .two-col { grid-template-columns: 1fr; }
+        }
+
+        /* Demo slide special styling */
+        .demo-slide {
+            background: var(--bg-primary);
+        }
+
+        .demo-pulse {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5em;
+        }
+
+        .demo-dot {
+            width: 12px;
+            height: 12px;
+            background: #ff3b30;
+            border-radius: 50%;
+            animation: demoPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes demoPulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.4); }
+            50% { opacity: 0.8; box-shadow: 0 0 0 12px rgba(255, 59, 48, 0); }
+        }
+
+        /* Architecture diagram (ASCII-style) */
+        .arch-box {
+            background: var(--code-bg);
+            border: 1px solid var(--code-border);
+            border-radius: 10px;
+            padding: clamp(1rem, 2vw, 1.5rem);
+            max-width: min(90vw, 600px);
+        }
+
+        .arch-box pre {
+            font-family: var(--font-mono);
+            font-size: clamp(0.55rem, 0.9vw, 0.75rem);
+            line-height: 1.5;
+            color: var(--text-secondary);
+        }
+
+        .arch-box .hl { color: var(--accent); font-weight: 500; }
+        .arch-box .dim { color: var(--text-muted); }
+
+        /* Glow background for special slides */
+        .glow-top::after {
+            content: '';
+            position: absolute;
+            top: -10%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            height: 400px;
+            background: radial-gradient(ellipse, rgba(204, 255, 0, 0.06) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .glow-center::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 800px;
+            height: 600px;
+            background: radial-gradient(ellipse, rgba(204, 255, 0, 0.04) 0%, transparent 60%);
+            pointer-events: none;
+        }
+
+        /* Cursor blink */
+        .cursor {
+            display: inline-block;
+            width: 2px;
+            height: 0.9em;
+            background: var(--accent);
+            margin-left: 3px;
+            vertical-align: text-bottom;
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        /* ===========================================
+           RESPONSIVE BREAKPOINTS
+           =========================================== */
+        @media (max-height: 700px) {
+            :root {
+                --slide-padding: clamp(1rem, 3vw, 2.5rem);
+                --content-gap: clamp(0.5rem, 1.5vw, 1rem);
+                --title-size: clamp(1.5rem, 5vw, 3.5rem);
+                --h2-size: clamp(1.25rem, 3.5vw, 2.25rem);
+            }
+        }
+
+        @media (max-height: 600px) {
+            :root {
+                --slide-padding: clamp(0.75rem, 2.5vw, 2rem);
+                --content-gap: clamp(0.4rem, 1vw, 0.75rem);
+                --title-size: clamp(1.25rem, 4.5vw, 2.5rem);
+                --h2-size: clamp(1rem, 3vw, 1.75rem);
+                --body-size: clamp(0.7rem, 1.2vw, 0.95rem);
+            }
+
+            .nav-dots, .slide-number { display: none; }
+        }
+
+        @media (max-height: 500px) {
+            :root {
+                --slide-padding: clamp(0.5rem, 2vw, 1.25rem);
+                --title-size: clamp(1rem, 4vw, 2rem);
+                --h2-size: clamp(0.9rem, 2.5vw, 1.5rem);
+                --body-size: clamp(0.65rem, 1vw, 0.85rem);
+            }
+        }
+
+        @media (max-width: 600px) {
+            :root {
+                --title-size: clamp(1.5rem, 8vw, 3rem);
+            }
+
+            .card-grid { grid-template-columns: 1fr; }
+            .timeline { flex-direction: column; }
+        }
+
+        /* ===========================================
+           REDUCED MOTION
+           =========================================== */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.2s !important;
+            }
+            html { scroll-behavior: auto; }
+        }
+
+        /* ===========================================
+           KEYBOARD HINT (bottom left)
+           =========================================== */
+        .keyboard-hint {
+            position: fixed;
+            bottom: clamp(0.75rem, 2vw, 1.5rem);
+            left: clamp(0.75rem, 2vw, 1.5rem);
+            font-family: var(--font-mono);
+            font-size: clamp(0.5rem, 0.7vw, 0.65rem);
+            color: var(--text-muted);
+            z-index: 100;
+            opacity: 0.5;
+        }
+
+        .keyboard-hint kbd {
+            background: var(--bg-card);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 3px;
+            padding: 0.1em 0.4em;
+            font-family: inherit;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Progress bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
+    <!-- Navigation dots -->
+    <nav class="nav-dots" id="navDots"></nav>
+
+    <!-- Slide number -->
+    <div class="slide-number" id="slideNumber"></div>
+
+    <!-- Keyboard hint -->
+    <div class="keyboard-hint">
+        <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or <kbd>Space</kbd>
+    </div>
+
+    <!-- ==========================================
+         SLIDE 1: TITLE
+         ========================================== -->
+    <section class="slide glow-top centered">
+        <div class="slide-content centered">
+            <div class="tag reveal">EXPO EVERYWHERE IN NYC</div>
+            <h1 class="reveal" style="margin-bottom: var(--content-gap);">
+                The App That<br><span class="accent">Builds Itself</span>
+            </h1>
+            <p class="reveal" style="max-width: 500px; margin: 0 auto;">
+                AI-powered development from inside your Expo app
+            </p>
+            <p class="reveal" style="margin-top: var(--content-gap); font-family: var(--font-mono); font-size: var(--small-size); color: var(--text-muted);">
+                <span style="color: var(--text-primary);">Bruno Barbieri &middot; @brunobar79</span><span class="cursor"></span>
+            </p>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 2: WHO AM I
+         ========================================== -->
+    <section class="slide">
+        <div class="slide-content">
+            <div class="tag reveal" style="font-family: var(--font-mono);">&gt; whoami</div>
+            <h2 class="reveal" style="margin-bottom: var(--content-gap);">Bruno Barbieri</h2>
+            <div class="card-grid" style="max-width: 700px; grid-template-columns: repeat(2, 1fr);">
+                <div class="card reveal" style="display: flex; flex-direction: column;">
+                    <div style="height: clamp(2rem, 3.5vw, 2.8rem); display: flex; align-items: center;">
+                        <span style="font-size: clamp(1.4rem, 2.5vw, 2rem);">&#x1f1fa;&#x1f1fe;</span>
+                    </div>
+                    <h3>Uruguay &rarr; NYC</h3>
+                    <p>11 years ago</p>
+                </div>
+                <div class="card reveal" style="display: flex; flex-direction: column;">
+                    <div style="height: clamp(2rem, 3.5vw, 2.8rem); display: flex; align-items: center;">
+                        <span style="font-family: var(--font-mono); font-size: clamp(1.2rem, 2vw, 1.6rem);">&lt;/&gt;</span>
+                    </div>
+                    <h3>React Native</h3>
+                    <p>Since 2015</p>
+                </div>
+                <div class="card reveal" style="display: flex; flex-direction: column;">
+                    <div style="height: clamp(2rem, 3.5vw, 2.8rem); display: flex; align-items: center;">
+                        <img src="https://join.base.app/images/base-app-icon.png" alt="Base" style="width: clamp(1.4rem, 2.5vw, 2rem); height: clamp(1.4rem, 2.5vw, 2rem); border-radius: 20%;">
+                    </div>
+                    <h3>Sr. Eng Manager</h3>
+                    <p>Base (Coinbase)</p>
+                </div>
+                <div class="card reveal" style="display: flex; flex-direction: column;">
+                    <div style="height: clamp(2rem, 3.5vw, 2.8rem); display: flex; align-items: center;">
+                        <span style="font-size: clamp(1.4rem, 2.5vw, 2rem);">&#x1f6e0;&#xfe0f;</span>
+                    </div>
+                    <h3>Serial App Maker</h3>
+                    <p>Nights &amp; weekends</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+<!-- ==========================================
+         SLIDE 4: AIGHT APP
+         ========================================== -->
+    <section class="slide">
+        <div class="slide-content">
+            <div class="tag reveal" style="font-family: var(--font-mono);">&gt; mkdir aight</div>
+            <img class="reveal" src="https://aight.cool/assets/images/aight-icon.png" alt="Aight logo" style="width: clamp(60px, 8vw, 100px); height: clamp(60px, 8vw, 100px); border-radius: 22%; margin-bottom: var(--element-gap);">
+            <h2 class="reveal" style="margin-bottom: var(--content-gap);">
+                Aight<span class="accent">.</span>
+            </h2>
+            <p class="reveal" style="max-width: 550px; margin-bottom: var(--content-gap);">
+                An iOS app built with Expo. My playground for trying wild ideas.
+            </p>
+            <p class="reveal" style="max-width: 550px;">
+                One of those wild ideas became the reason I'm on this stage today.
+            </p>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 5: THE PROBLEM
+         ========================================== -->
+    <section class="slide glow-center">
+        <div class="slide-content centered">
+            <h2 class="reveal" style="margin-bottom: var(--content-gap);">
+                You know this feeling...
+            </h2>
+            <p class="reveal big-quote" style="color: var(--text-secondary);">
+                You're using your app.<br>
+                You notice a bug.<br>
+                <span style="color: var(--text-muted);">Now what?</span>
+            </p>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 6: THE BROKEN LOOP
+         ========================================== -->
+    <section class="slide">
+        <div class="slide-content centered">
+            <h2 class="reveal" style="margin-bottom: var(--content-gap);">The context switch tax</h2>
+            <div class="flow reveal-scale" style="transition-delay: 0.2s;">
+                <div class="flow-step">Put phone down</div>
+                <div class="flow-arrow">&rarr;</div>
+                <div class="flow-step">Open laptop</div>
+                <div class="flow-arrow">&rarr;</div>
+                <div class="flow-step">Find the file</div>
+                <div class="flow-arrow">&rarr;</div>
+                <div class="flow-step">Fix it</div>
+                <div class="flow-arrow">&rarr;</div>
+                <div class="flow-step">Test</div>
+                <div class="flow-arrow">&rarr;</div>
+                <div class="flow-step">Ship</div>
+            </div>
+            <p class="reveal" style="margin-top: var(--content-gap); color: var(--text-muted); font-style: italic;">
+                The feedback loop is minutes, sometimes hours. It shouldn't be.
+            </p>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 7: WHAT IF
+         ========================================== -->
+    <section class="slide glow-center">
+        <div class="slide-content centered">
+            <p class="reveal big-quote" style="color: var(--text-primary);">
+                What if the app<br>you're building<br>could <span class="accent">help you build it?</span>
+            </p>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 8: AUDIENCE POLL
+         ========================================== -->
+    <section class="slide">
+        <div class="slide-content centered">
+            <h2 class="reveal" style="margin-bottom: var(--content-gap);">Quick show of hands</h2>
+            <p class="reveal big-quote" style="font-size: clamp(1.2rem, 3vw, 2.2rem);">
+                How many of you use <span class="accent">AI</span> for coding?
+            </p>
+            <p class="reveal" style="margin-top: var(--content-gap); color: var(--text-muted);">
+                Cool. Now forget everything you think you know about it.<br>
+                This is a <strong style="color: var(--text-primary);">different approach</strong>.
+            </p>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 8b: OPENCLAW POLL
+         ========================================== -->
+    <section class="slide">
+        <div class="slide-content centered">
+            <p class="reveal big-quote" style="font-size: clamp(1.2rem, 3vw, 2.2rem); color: var(--text-primary);">
+                Who uses <span class="accent">OpenClaw</span>?
+            </p>
+            <p class="reveal" style="margin-top: var(--content-gap); max-width: 500px; text-align: center; margin-left: auto; margin-right: auto;">
+                <span style="color: var(--text-secondary);">An open-source gateway that connects your apps to AI agents.</span><br>
+                <span style="color: var(--text-primary);">The bridge between your phone and your codebase.</span>
+            </p>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 9: THE APPROACH
+         ========================================== -->
+    <section class="slide">
+        <div class="slide-content centered">
+            <div class="tag reveal" style="font-family: var(--font-mono);">&gt; npm run idea</div>
+            <h2 class="reveal" style="margin-bottom: var(--content-gap);">
+                Not AI <em>generating</em> code.<br>
+                AI <span class="accent">inside</span> the app.
+            </h2>
+            <p class="reveal" style="max-width: 550px; margin: 0 auto;">
+                Embed a chat into your Expo app that connects to an AI agent with full access to your codebase. Fix bugs <em>from the app itself</em>.
+            </p>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 10: THE WORKFLOW
+         ========================================== -->
+    <section class="slide">
+        <div class="slide-content centered">
+            <h2 class="reveal" style="margin-bottom: var(--content-gap);">The new workflow</h2>
+            <div class="flow" style="flex-direction: column; gap: clamp(0.5rem, 1.2vw, 1rem); max-width: 650px;">
+                <div class="reveal" style="display: flex; align-items: center; gap: 1em;">
+                    <span style="font-size: var(--h3-size); font-family: var(--font-mono); color: var(--accent); min-width: 1.5em;">1.</span>
+                    <div class="flow-step" style="flex: 1; text-align: left; font-size: var(--h3-size); padding: clamp(0.6rem, 1.2vw, 1rem) clamp(0.8rem, 2vw, 1.5rem);">Notice a bug while using the app</div>
+                </div>
+                <div class="reveal" style="display: flex; align-items: center; gap: 1em;">
+                    <span style="font-size: var(--h3-size); font-family: var(--font-mono); color: var(--accent); min-width: 1.5em;">2.</span>
+                    <div class="flow-step" style="flex: 1; text-align: left; font-size: var(--h3-size); padding: clamp(0.6rem, 1.2vw, 1rem) clamp(0.8rem, 2vw, 1.5rem);">Take a screenshot</div>
+                </div>
+                <div class="reveal" style="display: flex; align-items: center; gap: 1em;">
+                    <span style="font-size: var(--h3-size); font-family: var(--font-mono); color: var(--accent); min-width: 1.5em;">3.</span>
+                    <div class="flow-step" style="flex: 1; text-align: left; font-size: var(--h3-size); padding: clamp(0.6rem, 1.2vw, 1rem) clamp(0.8rem, 2vw, 1.5rem);">Open chat &rarr; attach &rarr; describe</div>
+                </div>
+                <div class="reveal" style="display: flex; align-items: center; gap: 1em;">
+                    <span style="font-size: var(--h3-size); font-family: var(--font-mono); color: var(--accent); min-width: 1.5em;">4.</span>
+                    <div class="flow-step" style="flex: 1; text-align: left; font-size: var(--h3-size); padding: clamp(0.6rem, 1.2vw, 1rem) clamp(0.8rem, 2vw, 1.5rem);">Agent fixes the source code</div>
+                </div>
+                <div class="reveal" style="display: flex; align-items: center; gap: 1em;">
+                    <span style="font-size: var(--h3-size); font-family: var(--font-mono); color: var(--accent); min-width: 1.5em;">5.</span>
+                    <div class="flow-step" style="flex: 1; text-align: left; font-size: var(--h3-size); padding: clamp(0.6rem, 1.2vw, 1rem) clamp(0.8rem, 2vw, 1.5rem); border-color: rgba(204, 255, 0, 0.25);"><span class="accent">Metro hot-reloads &mdash; see the fix live</span></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 11: THE SDK
+         ========================================== -->
+    <section class="slide">
+        <div class="slide-content">
+            <div class="tag reveal" style="font-family: var(--font-mono);">&gt; npx expo install</div>
+            <h2 class="reveal" style="margin-bottom: 0.3em;">expo-openclaw-chat</h2>
+            <p class="reveal" style="margin-bottom: var(--content-gap);">
+                A minimal chat SDK that drops into any Expo app and connects it to an <span class="accent">OpenClaw</span> gateway.
+            </p>
+            <div class="card-grid" style="max-width: 700px;">
+                <div class="card reveal">
+                    <div class="card-icon">3</div>
+                    <h3>Three lines to integrate</h3>
+                    <p>createChat + ChatProvider + open()</p>
+                </div>
+                <div class="card reveal">
+                    <div class="card-icon">0</div>
+                    <h3>Zero backend to deploy</h3>
+                    <p>Your OpenClaw gateway IS the backend</p>
+                </div>
+                <div class="card reveal">
+                    <div class="card-icon">&#x1f4f7;</div>
+                    <h3>Vision built in</h3>
+                    <p>Send screenshots, agent sees your UI</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 12: CODE — createChat
+         ========================================== -->
+    <section class="slide">
+        <div class="slide-content centered">
+            <h2 class="reveal" style="margin-bottom: var(--content-gap);">This is it.</h2>
+            <div class="code-block reveal-scale" style="transition-delay: 0.2s; text-align: left;">
+                <div class="window-dots"><span></span><span></span><span></span></div>
+                <pre><code><span class="kw">import</span> { <span class="fn">createChat</span> } <span class="kw">from</span> <span class="str">"expo-openclaw-chat"</span>;
+
+<span class="kw">const</span> chat = <span class="fn">createChat</span>({
+  <span class="prop">gatewayUrl</span>: <span class="str">"wss://your-machine.ts.net"</span>,
+  <span class="prop">token</span>: <span class="str">"your-auth-token"</span>,
+});
+
+<span class="kw">export default function</span> <span class="fn">App</span>() {
+  <span class="kw">return</span> (
+    <span class="tag-s">&lt;chat.ChatProvider&gt;</span>
+      <span class="tag-s">&lt;YourApp /&gt;</span>
+      <span class="tag-s">&lt;Button</span> <span class="prop">onPress</span>={() => chat.<span class="fn">open</span>()} <span class="tag-s">/&gt;</span>
+    <span class="tag-s">&lt;/chat.ChatProvider&gt;</span>
+  );
+}</code></pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 13: IMAGE ATTACHMENTS
+         ========================================== -->
+    <section class="slide">
+        <div class="slide-content">
+            <div class="tag reveal" style="font-family: var(--font-mono);">&gt; open camera://</div>
+            <h2 class="reveal" style="margin-bottom: var(--content-gap);">
+                The agent can <span class="accent">see</span> your UI
+            </h2>
+            <div class="two-col">
+                <div>
+                    <p class="reveal" style="margin-bottom: var(--element-gap);">
+                        Enable <span class="mono">showImagePicker: true</span>
+                    </p>
+                    <ul class="bullet-list">
+                        <li class="reveal">Take a screenshot of the broken UI</li>
+                        <li class="reveal">Attach it to your chat message</li>
+                        <li class="reveal">Agent sees exactly what you see</li>
+                        <li class="reveal">Auto-resized &amp; base64 encoded</li>
+                    </ul>
+                </div>
+                <div class="code-block reveal-scale" style="transition-delay: 0.3s;">
+                    <div class="window-dots"><span></span><span></span><span></span></div>
+                    <pre><code><span class="cm">// That's it. One flag.</span>
+<span class="kw">const</span> chat = <span class="fn">createChat</span>({
+  <span class="prop">gatewayUrl</span>: <span class="str">"wss://..."</span>,
+  <span class="prop">token</span>: <span class="str">"..."</span>,
+  <span class="prop">showImagePicker</span>: <span class="kw">true</span>,
+});</code></pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 14: DEMO TIME
+         ========================================== -->
+    <section class="slide demo-slide glow-center">
+        <div class="slide-content centered">
+            <div class="reveal">
+                <div class="demo-pulse" style="font-size: var(--h2-size); font-weight: 900; letter-spacing: -0.03em;">
+                    <span class="demo-dot"></span>
+                    DEMO TIME
+                </div>
+            </div>
+            <p class="reveal" style="margin-top: var(--content-gap); color: var(--text-muted); font-family: var(--font-mono); font-size: var(--small-size);">
+                Let me show you this on my phone.
+            </p>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 14b: DEMO VIDEO
+         ========================================== -->
+    <section class="slide" style="padding: 0;">
+        <div class="slide-content centered" style="padding: 0; max-height: 100%; justify-content: center; align-items: center;">
+            <video class="reveal-scale" src="chat-demo.mp4" controls playsinline style="max-width: 100%; max-height: 100vh; max-height: 100dvh; object-fit: contain;"></video>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 15: BEHIND THE SCENES — ARCHITECTURE (Canvas)
+         ========================================== -->
+    <section class="slide" id="archSlide">
+        <div class="slide-content centered" style="position: relative;">
+            <h2 class="reveal" style="margin-bottom: var(--content-gap);">Behind the scenes</h2>
+            <canvas id="archCanvas" class="reveal-scale" style="transition-delay: 0.2s; max-width: min(90vw, 700px); max-height: min(65vh, 500px); width: 100%; border-radius: 12px;"></canvas>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 16: WHAT MAKES IT WORK
+         ========================================== -->
+    <section class="slide">
+        <div class="slide-content">
+            <h2 class="reveal" style="margin-bottom: var(--content-gap);">What makes it tick</h2>
+            <div class="card-grid" style="max-width: 700px;">
+                <div class="card reveal">
+                    <h3><span class="accent">WebSocket v3</span></h3>
+                    <p style="color: var(--text-primary);">Full protocol with request/response tracking and event streaming</p>
+                </div>
+                <div class="card reveal">
+                    <h3><span class="accent">Ed25519 Identity</span></h3>
+                    <p style="color: var(--text-primary);">Cryptographic device pairing — like AirPods, but for your dev setup</p>
+                </div>
+                <div class="card reveal">
+                    <h3><span class="accent">Hot Reload Loop</span></h3>
+                    <p style="color: var(--text-primary);">Agent edits code, Metro reloads — you see the fix instantly</p>
+                </div>
+                <div class="card reveal">
+                    <h3><span class="accent">Auto-Reconnect</span></h3>
+                    <p style="color: var(--text-primary);">Exponential backoff with jitter. Your subway ride won't kill the session</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 17: REMOTE DEVELOPMENT
+         ========================================== -->
+    <section class="slide">
+        <div class="slide-content">
+            <div class="tag reveal" style="font-family: var(--font-mono);">&gt; ssh couch</div>
+            <h2 class="reveal" style="margin-bottom: var(--content-gap);">
+                Laptops are optional
+            </h2>
+            <p class="reveal" style="margin-bottom: var(--content-gap); max-width: 550px;">
+                Forward <strong>Metro</strong> + <strong>OpenClaw gateway</strong> over Tailscale or ngrok. Your dev machine stays home. You ship from anywhere.
+            </p>
+            <div class="code-block reveal-scale" style="transition-delay: 0.2s; max-width: 450px;">
+                <div class="window-dots"><span></span><span></span><span></span></div>
+                <pre><code><span class="cm"># On your dev machine</span>
+<span class="fn">tailscale</span> serve --bg 8081
+
+<span class="cm"># That's it. Metro is now reachable</span>
+<span class="cm"># from your phone, anywhere.</span></code></pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 18: THE PUNCHLINE
+         ========================================== -->
+    <section class="slide glow-center">
+        <div class="slide-content centered">
+            <p class="reveal big-quote" style="color: var(--text-primary);">
+                All you need is<br><span class="accent">your phone</span>.
+            </p>
+            <p class="reveal" style="margin-top: var(--content-gap); color: var(--text-secondary); max-width: 500px;">
+                Your dev machine can be at home, at the office, in a closet. As long as it's on and connected &mdash; you're shipping code.
+            </p>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 19: THE TIGHTEST LOOP
+         ========================================== -->
+    <section class="slide">
+        <div class="slide-content centered">
+            <h2 class="reveal" style="margin-bottom: var(--content-gap);">
+                The tightest dev loop<br>I've ever experienced
+            </h2>
+            <p class="reveal" style="max-width: 550px; margin: 0 auto;">
+                Using the app &rarr; notice something &rarr; fix it <em>from the app</em> &rarr; see the fix &mdash; all without leaving the screen you're on.
+            </p>
+            <p class="reveal" style="margin-top: var(--content-gap); color: var(--text-muted); font-style: italic;">
+                Seconds, not minutes.
+            </p>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 20: BLOG POST TEASER
+         ========================================== -->
+    <section class="slide">
+        <div class="slide-content centered">
+            <div class="tag reveal" style="font-family: var(--font-mono);">&gt; vi blog-post.md</div>
+            <h2 class="reveal" style="margin-bottom: var(--content-gap);">
+                Full tutorial on the<br><span class="accent">Expo Blog</span>
+            </h2>
+            <ul class="bullet-list" style="text-align: left; display: inline-flex; flex-direction: column;">
+                <li class="reveal">Step-by-step setup guide</li>
+                <li class="reveal">Image attachments deep dive</li>
+                <li class="reveal">Remote development with Tailscale</li>
+                <li class="reveal">Custom UI components &amp; advanced usage</li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 21: OPEN SOURCE
+         ========================================== -->
+    <section class="slide">
+        <div class="slide-content centered">
+            <h2 class="reveal" style="margin-bottom: var(--content-gap);">
+                It's <span class="accent">open source</span>
+            </h2>
+            <div class="code-block reveal-scale" style="transition-delay: 0.15s; max-width: 500px; margin: 0 auto var(--content-gap);">
+                <div class="window-dots"><span></span><span></span><span></span></div>
+                <pre><code><span class="fn">npx</span> expo install expo-openclaw-chat</code></pre>
+            </div>
+            <p class="reveal" style="font-family: var(--font-mono); font-size: var(--small-size); color: var(--text-muted);">
+                github.com/brunobar79/expo-openclaw-chat
+            </p>
+            <p class="reveal" style="margin-top: var(--element-gap); font-size: var(--small-size); color: var(--text-muted);">
+                MIT Licensed
+            </p>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 22: WE'RE HIRING
+         ========================================== -->
+    <section class="slide glow-center">
+        <div class="slide-content centered">
+            <h2 class="reveal" style="margin-bottom: var(--content-gap);">
+                We're <span class="accent">hiring</span>
+            </h2>
+            <p class="reveal" style="font-family: var(--font-mono); font-size: var(--h3-size); color: var(--text-primary);">
+                <span class="accent">base.org/jobs</span>
+            </p>
+        </div>
+    </section>
+
+    <!-- ==========================================
+         SLIDE 23: THANK YOU
+         ========================================== -->
+    <section class="slide glow-top">
+        <div class="slide-content centered">
+            <h2 class="reveal" style="margin-bottom: var(--content-gap);">
+                Thanks! <span class="accent">&lt;/&gt;</span>
+            </h2>
+            <div style="display: flex; flex-direction: column; gap: var(--element-gap); font-family: var(--font-mono); font-size: var(--body-size);">
+                <p class="reveal"><span class="accent">@brunobar79</span> &mdash; X / Twitter</p>
+                <p class="reveal"><span class="accent">aight.cool</span> &mdash; Aight<span class="accent">.</span></p>
+                <p class="reveal"><span class="accent">github.com/brunobar79</span> &mdash; Code</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==========================================
+       JAVASCRIPT: Navigation, animations, interactions
+       ========================================== -->
+    <script>
+        /* ===========================================
+           SLIDE PRESENTATION CONTROLLER
+           Handles keyboard/touch navigation, scroll-triggered
+           animations, progress bar, and navigation dots.
+           =========================================== */
+        class SlidePresentation {
+            constructor() {
+                this.slides = Array.from(document.querySelectorAll('.slide'));
+                this.currentSlide = 0;
+                this.isScrolling = false;
+                this.scrollTimeout = null;
+
+                this.initNavDots();
+                this.initObserver();
+                this.initKeyboard();
+                this.initTouch();
+                this.initWheel();
+                this.updateProgress();
+
+                // Mark first slide as visible
+                this.slides[0].classList.add('visible');
+            }
+
+            /* -------------------------------------------
+               NAVIGATION DOTS
+               One dot per slide, click to jump
+               ------------------------------------------- */
+            initNavDots() {
+                const nav = document.getElementById('navDots');
+                this.slides.forEach((_, i) => {
+                    const dot = document.createElement('button');
+                    dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+                    dot.setAttribute('aria-label', `Go to slide ${i + 1}`);
+                    dot.addEventListener('click', () => this.goToSlide(i));
+                    nav.appendChild(dot);
+                });
+                this.dots = Array.from(nav.querySelectorAll('.nav-dot'));
+            }
+
+            /* -------------------------------------------
+               INTERSECTION OBSERVER
+               Detects which slide is in view, triggers animations
+               ------------------------------------------- */
+            initObserver() {
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add('visible');
+                            const index = this.slides.indexOf(entry.target);
+                            if (index !== -1) {
+                                this.currentSlide = index;
+                                this.updateProgress();
+                                this.updateDots();
+                                this.updateSlideNumber();
+                            }
+                        }
+                    });
+                }, {
+                    threshold: 0.5
+                });
+
+                this.slides.forEach(slide => observer.observe(slide));
+            }
+
+            /* -------------------------------------------
+               KEYBOARD NAVIGATION
+               Arrow keys, space, page up/down
+               ------------------------------------------- */
+            initKeyboard() {
+                document.addEventListener('keydown', (e) => {
+                    switch (e.key) {
+                        case 'ArrowRight':
+                        case 'ArrowDown':
+                        case ' ':
+                        case 'PageDown':
+                            e.preventDefault();
+                            this.nextSlide();
+                            break;
+                        case 'ArrowLeft':
+                        case 'ArrowUp':
+                        case 'PageUp':
+                            e.preventDefault();
+                            this.prevSlide();
+                            break;
+                        case 'Home':
+                            e.preventDefault();
+                            this.goToSlide(0);
+                            break;
+                        case 'End':
+                            e.preventDefault();
+                            this.goToSlide(this.slides.length - 1);
+                            break;
+                    }
+                });
+            }
+
+            /* -------------------------------------------
+               TOUCH / SWIPE
+               Vertical swipe on mobile
+               ------------------------------------------- */
+            initTouch() {
+                let startY = 0;
+                let startX = 0;
+
+                document.addEventListener('touchstart', (e) => {
+                    startY = e.touches[0].clientY;
+                    startX = e.touches[0].clientX;
+                }, { passive: true });
+
+                document.addEventListener('touchend', (e) => {
+                    const deltaY = startY - e.changedTouches[0].clientY;
+                    const deltaX = startX - e.changedTouches[0].clientX;
+
+                    // Only respond to vertical swipes (not horizontal)
+                    if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 50) {
+                        if (deltaY > 0) this.nextSlide();
+                        else this.prevSlide();
+                    }
+                }, { passive: true });
+            }
+
+            /* -------------------------------------------
+               MOUSE WHEEL
+               Throttled wheel navigation
+               ------------------------------------------- */
+            initWheel() {
+                document.addEventListener('wheel', (e) => {
+                    if (this.isScrolling) return;
+                    this.isScrolling = true;
+
+                    if (e.deltaY > 30) this.nextSlide();
+                    else if (e.deltaY < -30) this.prevSlide();
+
+                    clearTimeout(this.scrollTimeout);
+                    this.scrollTimeout = setTimeout(() => {
+                        this.isScrolling = false;
+                    }, 800);
+                }, { passive: true });
+            }
+
+            /* -------------------------------------------
+               NAVIGATION METHODS
+               ------------------------------------------- */
+            nextSlide() {
+                if (this.currentSlide < this.slides.length - 1) {
+                    this.goToSlide(this.currentSlide + 1);
+                }
+            }
+
+            prevSlide() {
+                if (this.currentSlide > 0) {
+                    this.goToSlide(this.currentSlide - 1);
+                }
+            }
+
+            goToSlide(index) {
+                this.slides[index].scrollIntoView({ behavior: 'smooth' });
+                this.currentSlide = index;
+                this.updateProgress();
+                this.updateDots();
+                this.updateSlideNumber();
+            }
+
+            /* -------------------------------------------
+               UI UPDATES
+               Progress bar, dots, slide number
+               ------------------------------------------- */
+            updateProgress() {
+                const progress = ((this.currentSlide + 1) / this.slides.length) * 100;
+                document.getElementById('progressBar').style.width = progress + '%';
+            }
+
+            updateDots() {
+                this.dots.forEach((dot, i) => {
+                    dot.classList.toggle('active', i === this.currentSlide);
+                });
+            }
+
+            updateSlideNumber() {
+                document.getElementById('slideNumber').textContent =
+                    `${this.currentSlide + 1} / ${this.slides.length}`;
+            }
+        }
+
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            new SlidePresentation();
+            initArchCanvas();
+        });
+
+        /* ===========================================
+           ARCHITECTURE DIAGRAM — Canvas
+           Animated node-and-line diagram
+           =========================================== */
+        function initArchCanvas() {
+            const canvas = document.getElementById('archCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+
+            const dpr = window.devicePixelRatio || 1;
+            const W = 700;
+            const H = 480;
+            canvas.width = W * dpr;
+            canvas.height = H * dpr;
+            canvas.style.width = W + 'px';
+            canvas.style.height = H + 'px';
+            ctx.scale(dpr, dpr);
+
+            const LIME = '#ccff00';
+            const LIME_DIM = 'rgba(204,255,0,0.12)';
+            const LIME_GLOW = 'rgba(204,255,0,0.3)';
+            const WHITE = '#e8e8e8';
+            const GREY = '#6b7a8d';
+            const DIM = '#3d4a5c';
+            const BG = '#0d1117';
+            const CARD_BG = '#151d28';
+            const CARD_BORDER = 'rgba(204,255,0,0.1)';
+
+            // Node definitions: label, x, y, isAccent
+            const nodes = [
+                { label: 'Your Phone',      sub: 'Expo App',         x: W/2,     y: 52,   accent: true },
+                { label: 'Chat SDK',         sub: 'Modal + Engine',   x: W/2,     y: 145,  accent: false },
+                { label: 'WebSocket',        sub: 'wss:// + Ed25519', x: W/2,     y: 238,  accent: false },
+                { label: 'OpenClaw',         sub: 'Gateway',          x: W/2,     y: 328,  accent: true },
+                { label: 'AI Agent',         sub: 'Edits your code',  x: W/2 - 130, y: 420, accent: false },
+                { label: 'Metro',            sub: 'Hot Reload',       x: W/2 + 130, y: 420, accent: true },
+            ];
+
+            // Connections: from index, to index
+            const connections = [
+                [0, 1], [1, 2], [2, 3], [3, 4], [3, 5], [4, 5]
+            ];
+
+            let animProgress = 0;
+            let startTime = null;
+            let hasStarted = false;
+
+            // Observe when slide is visible to start animation
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting && !hasStarted) {
+                        hasStarted = true;
+                        startTime = performance.now();
+                        requestAnimationFrame(draw);
+                    }
+                });
+            }, { threshold: 0.5 });
+            observer.observe(document.getElementById('archSlide'));
+
+            function drawRoundedRect(x, y, w, h, r) {
+                ctx.beginPath();
+                ctx.moveTo(x + r, y);
+                ctx.lineTo(x + w - r, y);
+                ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+                ctx.lineTo(x + w, y + h - r);
+                ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+                ctx.lineTo(x + r, y + h);
+                ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+                ctx.lineTo(x, y + r);
+                ctx.quadraticCurveTo(x, y, x + r, y);
+                ctx.closePath();
+            }
+
+            function drawNode(node, alpha) {
+                const nw = 160;
+                const nh = 54;
+                const nx = node.x - nw/2;
+                const ny = node.y - nh/2;
+
+                ctx.globalAlpha = alpha;
+
+                // Glow for accent nodes
+                if (node.accent) {
+                    ctx.shadowColor = LIME_GLOW;
+                    ctx.shadowBlur = 20;
+                }
+
+                // Card background
+                drawRoundedRect(nx, ny, nw, nh, 10);
+                ctx.fillStyle = CARD_BG;
+                ctx.fill();
+                ctx.strokeStyle = node.accent ? 'rgba(204,255,0,0.25)' : CARD_BORDER;
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+
+                // Label
+                ctx.font = '600 14px Satoshi, sans-serif';
+                ctx.fillStyle = node.accent ? LIME : WHITE;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(node.label, node.x, node.y - 8);
+
+                // Sub label
+                ctx.font = '400 11px "JetBrains Mono", monospace';
+                ctx.fillStyle = GREY;
+                ctx.fillText(node.sub, node.x, node.y + 12);
+
+                ctx.globalAlpha = 1;
+            }
+
+            function drawConnection(from, to, progress) {
+                const fx = from.x, fy = from.y + 27;
+                const tx = to.x, ty = to.y - 27;
+
+                // Animated line
+                const cx = fx + (tx - fx) * progress;
+                const cy = fy + (ty - fy) * progress;
+
+                ctx.beginPath();
+                ctx.moveTo(fx, fy);
+                ctx.lineTo(cx, cy);
+                ctx.strokeStyle = DIM;
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 4]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Animated dot traveling along line
+                if (progress > 0 && progress < 1) {
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+                    ctx.fillStyle = LIME;
+                    ctx.shadowColor = LIME_GLOW;
+                    ctx.shadowBlur = 10;
+                    ctx.fill();
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                }
+
+                // Arrow head when complete
+                if (progress >= 1) {
+                    const angle = Math.atan2(ty - fy, tx - fx);
+                    const arrowLen = 8;
+                    ctx.beginPath();
+                    ctx.moveTo(tx, ty);
+                    ctx.lineTo(tx - arrowLen * Math.cos(angle - 0.4), ty - arrowLen * Math.sin(angle - 0.4));
+                    ctx.moveTo(tx, ty);
+                    ctx.lineTo(tx - arrowLen * Math.cos(angle + 0.4), ty - arrowLen * Math.sin(angle + 0.4));
+                    ctx.strokeStyle = LIME;
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                }
+            }
+
+            // Special horizontal connection (AI Agent → Metro)
+            function drawHorizConnection(from, to, progress) {
+                const fx = from.x + 80, fy = from.y;
+                const tx = to.x - 80, ty = to.y;
+
+                const cx = fx + (tx - fx) * progress;
+
+                ctx.beginPath();
+                ctx.moveTo(fx, fy);
+                ctx.lineTo(cx, fy);
+                ctx.strokeStyle = DIM;
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 4]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                if (progress > 0 && progress < 1) {
+                    ctx.beginPath();
+                    ctx.arc(cx, fy, 3, 0, Math.PI * 2);
+                    ctx.fillStyle = LIME;
+                    ctx.shadowColor = LIME_GLOW;
+                    ctx.shadowBlur = 10;
+                    ctx.fill();
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                }
+
+                if (progress >= 1) {
+                    ctx.beginPath();
+                    ctx.moveTo(tx, ty);
+                    ctx.lineTo(tx - 8, ty - 5);
+                    ctx.moveTo(tx, ty);
+                    ctx.lineTo(tx - 8, ty + 5);
+                    ctx.strokeStyle = LIME;
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                }
+            }
+
+            // Loop back arrow: Metro → Phone (right side)
+            function drawLoopBack(from, to, progress) {
+                const sx = from.x + 80;
+                const sy = from.y;
+                const ex = to.x + 80;
+                const ey = to.y + 27;
+                const farX = W - 40;
+
+                if (progress <= 0) return;
+
+                const totalLen = (farX - sx) + (sy - ey) + (farX - ex);
+                const drawn = totalLen * progress;
+
+                ctx.beginPath();
+                ctx.strokeStyle = DIM;
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 4]);
+
+                // Segment 1: right from Metro
+                const seg1 = farX - sx;
+                if (drawn <= seg1) {
+                    ctx.moveTo(sx, sy);
+                    ctx.lineTo(sx + drawn, sy);
+                } else {
+                    ctx.moveTo(sx, sy);
+                    ctx.lineTo(farX, sy);
+                    // Segment 2: up
+                    const seg2 = sy - ey;
+                    const remaining = drawn - seg1;
+                    if (remaining <= seg2) {
+                        ctx.moveTo(farX, sy);
+                        ctx.lineTo(farX, sy - remaining);
+                    } else {
+                        ctx.moveTo(farX, sy);
+                        ctx.lineTo(farX, ey);
+                        // Segment 3: left to Phone
+                        const seg3Drawn = remaining - seg2;
+                        ctx.moveTo(farX, ey);
+                        ctx.lineTo(farX - seg3Drawn, ey);
+                    }
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Arrow at end
+                if (progress >= 1) {
+                    ctx.beginPath();
+                    ctx.moveTo(ex, ey);
+                    ctx.lineTo(ex + 8, ey - 5);
+                    ctx.moveTo(ex, ey);
+                    ctx.lineTo(ex + 8, ey + 5);
+                    ctx.strokeStyle = LIME;
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+
+                    // "Updated UI" label
+                    ctx.font = '500 11px "JetBrains Mono", monospace';
+                    ctx.fillStyle = LIME;
+                    ctx.textAlign = 'center';
+                    ctx.fillText('↻ Updated UI', farX - 20, sy/2 + ey/2);
+                }
+            }
+
+            function draw(timestamp) {
+                if (!startTime) startTime = timestamp;
+                const elapsed = (timestamp - startTime) / 1000; // seconds
+
+                ctx.clearRect(0, 0, W, H);
+
+                // Total animation: ~3s
+                // Each node fades in over 0.4s, staggered by 0.3s
+                // Connections animate between their nodes
+
+                const nodeDelay = 0.25;
+                const nodeDuration = 0.4;
+                const connDelay = 0.15;
+
+                // Draw connections first (behind nodes)
+                for (let i = 0; i < connections.length; i++) {
+                    const [fi, ti] = connections[i];
+                    const connStart = Math.max(nodeDelay * fi + nodeDuration, nodeDelay * ti);
+                    const connEnd = connStart + 0.5;
+                    const p = Math.max(0, Math.min(1, (elapsed - connStart) / (connEnd - connStart)));
+
+                    if (i === 5) {
+                        // AI Agent → Metro (horizontal)
+                        drawHorizConnection(nodes[fi], nodes[ti], p);
+                    } else {
+                        drawConnection(nodes[fi], nodes[ti], p);
+                    }
+                }
+
+                // Loop back: Metro → Phone
+                const loopStart = 2.5;
+                const loopEnd = 3.5;
+                const loopP = Math.max(0, Math.min(1, (elapsed - loopStart) / (loopEnd - loopStart)));
+                drawLoopBack(nodes[5], nodes[0], loopP);
+
+                // Draw nodes
+                for (let i = 0; i < nodes.length; i++) {
+                    const nStart = nodeDelay * i;
+                    const alpha = Math.max(0, Math.min(1, (elapsed - nStart) / nodeDuration));
+                    if (alpha > 0) drawNode(nodes[i], alpha);
+                }
+
+                // Keep animating until complete, then do one last frame
+                if (elapsed < 4) {
+                    requestAnimationFrame(draw);
+                }
+            }
+
+            // Resize handler
+            window.addEventListener('resize', () => {
+                // Canvas stays fixed internal size, CSS scales it
+            });
+        }
+    </script>
+</body>
+</html>
