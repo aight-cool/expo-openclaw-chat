@@ -33,12 +33,8 @@ git checkout -b "${BRANCH}"
 
 # Commit changes
 echo "📝 Committing release files..."
-git add package.json LICENSE CHANGELOG.md
-git commit -m "chore: prepare v${VERSION} release
-
-- Add author field
-- Add LICENSE file
-- Add CHANGELOG.md"
+git add package.json CHANGELOG.md scripts/release.sh
+git commit -m "chore: bump to v${VERSION}"
 
 # Push branch
 echo "⬆️ Pushing branch..."
@@ -50,11 +46,7 @@ PR_URL=$(gh pr create \
   --title "chore: release v${VERSION}" \
   --body "## Release v${VERSION}
 
-Initial public release of expo-openclaw-chat.
-
-### Changes
-- Add author and license information
-- Add CHANGELOG.md" \
+See [CHANGELOG.md](CHANGELOG.md) for details." \
   --head "${BRANCH}" \
   --base main)
 
@@ -88,15 +80,18 @@ git pull origin main
 echo "🏷️ Creating GitHub release..."
 gh release create "v${VERSION}" \
   --title "v${VERSION}" \
-  --notes "Initial release of expo-openclaw-chat.
-
-See [CHANGELOG.md](CHANGELOG.md) for details."
+  --generate-notes
 
 echo "✅ GitHub release created"
 
 # Publish to npm
 echo "📦 Publishing to npm..."
-npm publish
+if [ -n "$NPM_OTP" ]; then
+  npm publish --otp="$NPM_OTP"
+else
+  echo "⚠️  NPM_OTP not set. Run manually: npm publish --otp=<code>"
+  exit 1
+fi
 
 echo ""
 echo "🎉 Release v${VERSION} complete!"
