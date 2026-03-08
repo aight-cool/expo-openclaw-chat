@@ -425,7 +425,8 @@ describe("GatewayClient additional tests", () => {
       >;
       expect(pendingRequests.size).toBe(1);
 
-      const [, pending] = [...pendingRequests.entries()][0];
+      const entry = [...pendingRequests.entries()][0]!;
+      const pending = entry[1];
       pending.resolve({ result: "success" });
 
       const result = await requestPromise;
