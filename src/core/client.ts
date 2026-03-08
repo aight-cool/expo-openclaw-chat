@@ -65,6 +65,8 @@ export interface GatewayClientOptions {
   platform?: string;
   /** Client ID for gateway registration (default: openclaw-ios) */
   clientId?: string;
+  /** Enable verbose WebSocket frame logging (default false) */
+  debug?: boolean;
 }
 
 // ─── Event Listener Types ───────────────────────────────────────────────────────
@@ -273,23 +275,24 @@ export class GatewayClient {
         // "Not connected" errors during WS flaps (e.g. group chat fan-out).
         if (this.options.autoReconnect !== false && this._connectionState !== "disconnected") {
           const waitTimeout = 5000;
-          const start = Date.now();
+          let settled = false;
           const unsub = this.onConnectionStateChange((state) => {
+            if (settled) return;
             if (state === "connected") {
+              settled = true;
               unsub();
-              // Re-dispatch now that we're connected
               this.request<T>(method, params, timeoutMs).then(resolve, reject);
-            } else if (state === "disconnected" || Date.now() - start > waitTimeout) {
+            } else if (state === "disconnected") {
+              settled = true;
               unsub();
               reject(new Error("Not connected"));
             }
           });
-          // Safety timeout in case no state change fires
           setTimeout(() => {
+            if (settled) return;
+            settled = true;
             unsub();
-            if (this._connectionState !== "connected") {
-              reject(new Error("Not connected"));
-            }
+            reject(new Error("Not connected"));
           }, waitTimeout);
           return;
         }
@@ -553,7 +556,7 @@ export class GatewayClient {
     };
 
     this.ws.onmessage = (event) => {
-      console.log("[GatewayClient] WS onmessage:", typeof event.data === "string" ? event.data.slice(0, 200) : "(non-string)");
+      if (this.options.debug) console.log("[GatewayClient] WS onmessage:", typeof event.data === "string" ? event.data.slice(0, 200) : "(non-string)");
       this.handleMessage(event.data as string);
     };
 
@@ -877,7 +880,7 @@ export class GatewayClient {
       params: params as unknown as Record<string, unknown>,
     };
 
-    console.log("[GatewayClient] sending connect frame", { id, method: frame.method, hasAuth: !!auth.token || !!auth.deviceToken });
+    if (this.options.debug) console.log("[GatewayClient] sending connect frame", { id, method: frame.method, hasAuth: !!auth.token || !!auth.deviceToken });
     this.sendFrame(frame);
   }
 
