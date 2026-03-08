@@ -65,8 +65,6 @@ export interface GatewayClientOptions {
   platform?: string;
   /** Client ID for gateway registration (default: openclaw-ios) */
   clientId?: string;
-  /** Enable verbose WebSocket frame logging (default false) */
-  debug?: boolean;
 }
 
 // ─── Event Listener Types ───────────────────────────────────────────────────────
@@ -542,7 +540,6 @@ export class GatewayClient {
     }
 
     this.ws.onopen = () => {
-      console.log("[GatewayClient] WS onopen fired");
       // Wait for either connect.challenge or send connect immediately
       // The server may or may not send a challenge; set a small timeout
       // to send connect if no challenge arrives
@@ -556,7 +553,6 @@ export class GatewayClient {
     };
 
     this.ws.onmessage = (event) => {
-      if (this.options.debug) console.log("[GatewayClient] WS onmessage:", typeof event.data === "string" ? event.data.slice(0, 200) : "(non-string)");
       this.handleMessage(event.data as string);
     };
 
@@ -565,7 +561,6 @@ export class GatewayClient {
     };
 
     this.ws.onclose = (event) => {
-      console.log("[GatewayClient] WS onclose:", event.code, event.reason);
       this.handleClose(event.code ?? 1000, event.reason ?? "");
     };
   }
@@ -609,7 +604,6 @@ export class GatewayClient {
       // Check if this is the connect response (hello-ok)
       const payload = frame.payload as Record<string, unknown> | undefined;
       if (payload && payload.type === "hello-ok") {
-        console.log("[GatewayClient] received hello-ok");
         this.handleHelloOk(payload as unknown as HelloOk);
       }
       pending.resolve(frame.payload);
@@ -731,7 +725,6 @@ export class GatewayClient {
 
     if (payload.decision === "approved") {
       // Retry connect now that we're approved
-      console.log("[GatewayClient] Device approved, retrying connect...");
       this.sendConnectFrame();
     } else {
       // Rejected - fail the connection
@@ -767,7 +760,6 @@ export class GatewayClient {
   }
 
   private sendConnectFrame(): void {
-    console.log("[GatewayClient] sendConnectFrame called");
     // Call async version - we have identity loaded by now
     this.sendConnectFrameAsync().catch((err) => {
       this.handleConnectFailure(err);
@@ -880,12 +872,10 @@ export class GatewayClient {
       params: params as unknown as Record<string, unknown>,
     };
 
-    if (this.options.debug) console.log("[GatewayClient] sending connect frame", { id, method: frame.method, hasAuth: !!auth.token || !!auth.deviceToken });
     this.sendFrame(frame);
   }
 
   private handleConnectFailure(error: Error): void {
-    console.log("[GatewayClient] handleConnectFailure:", error.message);
     if (this.connectPromiseReject) {
       this.connectPromiseReject(error);
       this.connectPromiseResolve = null;
