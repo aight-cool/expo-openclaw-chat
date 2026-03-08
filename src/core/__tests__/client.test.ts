@@ -371,4 +371,124 @@ describe("GatewayClient additional tests", () => {
       expect(client.connectionState).toBe("disconnected");
     });
   });
+
+  describe("request reconnect-wait", () => {
+    it("rejects immediately when disconnected and autoReconnect is off", async () => {
+      const client = new GatewayClient("wss://test.example.com", {
+        autoReconnect: false,
+      });
+
+      await expect(client.request("test.method")).rejects.toThrow(
+        "Not connected",
+      );
+    });
+
+    it("rejects immediately when state is disconnected even with autoReconnect", async () => {
+      const client = new GatewayClient("wss://test.example.com", {
+        autoReconnect: true,
+      });
+      // Default state is "disconnected"
+      expect(client.connectionState).toBe("disconnected");
+
+      await expect(client.request("test.method")).rejects.toThrow(
+        "Not connected",
+      );
+    });
+
+    it("waits for reconnection when in reconnecting state", async () => {
+      const client = new GatewayClient("wss://test.example.com", {
+        autoReconnect: true,
+      });
+
+      // Simulate reconnecting state
+      (client as any)._connectionState = "reconnecting";
+      (client as any).ws = null;
+
+      const requestPromise = client.request("test.method");
+
+      // Simulate reconnection: transition to connected with a working WS
+      const mockWs = new MockWebSocket("wss://test.example.com");
+      mockWs.readyState = MockWebSocket.OPEN;
+      (client as any).ws = mockWs;
+      (client as any).setConnectionState("connected");
+
+      // The re-dispatched request will also need to be resolved
+      // Since WS is "connected" now, it will send a frame and wait for response
+      // We need to resolve it via the pending requests mechanism
+      // Give it a tick to re-dispatch
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Find the pending request and resolve it
+      const pendingRequests = (client as any).pendingRequests as Map<
+        string,
+        { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }
+      >;
+      expect(pendingRequests.size).toBe(1);
+
+      const [, pending] = [...pendingRequests.entries()][0];
+      pending.resolve({ result: "success" });
+
+      const result = await requestPromise;
+      expect(result).toEqual({ result: "success" });
+    });
+
+    it("rejects when state transitions to disconnected while waiting", async () => {
+      const client = new GatewayClient("wss://test.example.com", {
+        autoReconnect: true,
+      });
+
+      // Simulate reconnecting state
+      (client as any)._connectionState = "reconnecting";
+      (client as any).ws = null;
+
+      const requestPromise = client.request("test.method");
+
+      // Simulate failed reconnection
+      (client as any).setConnectionState("disconnected");
+
+      await expect(requestPromise).rejects.toThrow("Not connected");
+    });
+
+    it("rejects after timeout if no state change occurs", async () => {
+      jest.useFakeTimers();
+
+      const client = new GatewayClient("wss://test.example.com", {
+        autoReconnect: true,
+      });
+
+      (client as any)._connectionState = "reconnecting";
+      (client as any).ws = null;
+
+      const requestPromise = client.request("test.method");
+
+      // Advance past the 5s wait timeout
+      jest.advanceTimersByTime(5100);
+
+      await expect(requestPromise).rejects.toThrow("Not connected");
+
+      jest.useRealTimers();
+    });
+
+    it("settled guard prevents double resolution", async () => {
+      const client = new GatewayClient("wss://test.example.com", {
+        autoReconnect: true,
+      });
+
+      (client as any)._connectionState = "reconnecting";
+      (client as any).ws = null;
+
+      const requestPromise = client.request("test.method");
+
+      // Rapid state transitions: disconnected then connected
+      (client as any).setConnectionState("disconnected");
+
+      // Even if we set connected after, the promise should already be rejected
+      const mockWs = new MockWebSocket("wss://test.example.com");
+      mockWs.readyState = MockWebSocket.OPEN;
+      (client as any).ws = mockWs;
+      (client as any).setConnectionState("connected");
+
+      await expect(requestPromise).rejects.toThrow("Not connected");
+    });
+  });
 });
