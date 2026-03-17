@@ -16,6 +16,7 @@ import {
   ScrollView,
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useTranslation } from "react-i18next";
 import type { PendingAttachment } from "../chat/engine";
 
 // Try to import image picker (optional dep)
@@ -76,10 +77,12 @@ export const ChatInput = React.memo(function ChatInput({
   onSend,
   onAbort,
   isStreaming,
-  placeholder = "Type a message...",
+  placeholder,
   disabled,
   showImagePicker = true,
 }: ChatInputProps) {
+  const { t } = useTranslation();
+  const resolvedPlaceholder = placeholder ?? t("chat.inputPlaceholder");
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
 
@@ -233,7 +236,7 @@ export const ChatInput = React.memo(function ChatInput({
             style={styles.input}
             value={text}
             onChangeText={setText}
-            placeholder={placeholder}
+            placeholder={resolvedPlaceholder}
             placeholderTextColor="#8E8E93"
             multiline
             maxLength={10000}

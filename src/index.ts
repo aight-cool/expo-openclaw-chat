@@ -46,6 +46,9 @@ export {
   type ChatEngineEvent,
 } from "./chat";
 
+// i18n
+export { default as i18n, resources as i18nResources, detectLanguage } from "./i18n";
+
 // UI components (for custom implementations)
 export { ChatModal, ChatList, ChatBubble, ChatInput } from "./ui";
 export type {

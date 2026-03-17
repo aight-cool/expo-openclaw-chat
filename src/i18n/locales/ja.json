@@ -1,0 +1,24 @@
+{
+  "chat": {
+    "title": "チャット",
+    "done": "完了",
+    "connecting": "接続中...",
+    "awaitingApproval": "承認待ち",
+    "awaitingApprovalSubtext": "ゲートウェイでこのデバイスを承認してください",
+    "noMessages": "まだメッセージがありません",
+    "noMessagesSubtext": "メッセージを送信してチャットを始めましょう",
+    "inputPlaceholder": "メッセージを入力..."
+  },
+  "demo": {
+    "subtitle": "デモアプリ",
+    "gatewayUrl": "ゲートウェイURL",
+    "gatewayUrlPlaceholder": "wss://your-gateway.example.com",
+    "authToken": "認証トークン（任意）",
+    "authTokenPlaceholder": "your-auth-token",
+    "configure": "設定する",
+    "gatewayConfigured": "ゲートウェイ設定済み",
+    "openChat": "チャットを開く",
+    "resetConfiguration": "設定をリセット",
+    "footerText": "このデモはexpo-openclaw-chat SDKの使い方を示しています。ゲートウェイURLを設定して「チャットを開く」をタップしてください。"
+  }
+}

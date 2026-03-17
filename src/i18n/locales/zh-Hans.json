@@ -1,0 +1,24 @@
+{
+  "chat": {
+    "title": "聊天",
+    "done": "完成",
+    "connecting": "连接中...",
+    "awaitingApproval": "等待审批",
+    "awaitingApprovalSubtext": "请在网关上批准此设备",
+    "noMessages": "暂无消息",
+    "noMessagesSubtext": "发送消息开始聊天",
+    "inputPlaceholder": "输入消息..."
+  },
+  "demo": {
+    "subtitle": "演示应用",
+    "gatewayUrl": "网关地址",
+    "gatewayUrlPlaceholder": "wss://your-gateway.example.com",
+    "authToken": "认证令牌（可选）",
+    "authTokenPlaceholder": "your-auth-token",
+    "configure": "配置",
+    "gatewayConfigured": "网关已配置",
+    "openChat": "打开聊天",
+    "resetConfiguration": "重置配置",
+    "footerText": "此演示展示了如何使用 expo-openclaw-chat SDK。配置您的网关地址，然后点击「打开聊天」开始使用。"
+  }
+}

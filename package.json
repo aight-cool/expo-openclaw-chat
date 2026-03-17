@@ -17,7 +17,10 @@
   },
   "dependencies": {
     "@noble/ed25519": "^3.0.0",
-    "@noble/hashes": "^2.0.0"
+    "@noble/hashes": "^2.0.0",
+    "expo-localization": "^55.0.8",
+    "i18next": "^25.8.18",
+    "react-i18next": "^16.5.8"
   },
   "peerDependencies": {
     "expo-secure-store": ">=13.0.0",

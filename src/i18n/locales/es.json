@@ -1,0 +1,24 @@
+{
+  "chat": {
+    "title": "Chat",
+    "done": "Listo",
+    "connecting": "Conectando...",
+    "awaitingApproval": "Esperando aprobación",
+    "awaitingApprovalSubtext": "Por favor, aprueba este dispositivo en la pasarela",
+    "noMessages": "Aún no hay mensajes",
+    "noMessagesSubtext": "Envía un mensaje para comenzar a chatear",
+    "inputPlaceholder": "Escribe un mensaje..."
+  },
+  "demo": {
+    "subtitle": "App de demostración",
+    "gatewayUrl": "URL de la pasarela",
+    "gatewayUrlPlaceholder": "wss://tu-pasarela.ejemplo.com",
+    "authToken": "Token de autenticación (opcional)",
+    "authTokenPlaceholder": "tu-token-de-autenticación",
+    "configure": "Configurar",
+    "gatewayConfigured": "Pasarela configurada",
+    "openChat": "Abrir chat",
+    "resetConfiguration": "Restablecer configuración",
+    "footerText": "Esta demo muestra cómo usar el SDK expo-openclaw-chat. Configura la URL de tu pasarela y toca \"Abrir chat\" para comenzar."
+  }
+}

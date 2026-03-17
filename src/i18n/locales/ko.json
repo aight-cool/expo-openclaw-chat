@@ -1,0 +1,24 @@
+{
+  "chat": {
+    "title": "채팅",
+    "done": "완료",
+    "connecting": "연결 중...",
+    "awaitingApproval": "승인 대기 중",
+    "awaitingApprovalSubtext": "게이트웨이에서 이 기기를 승인해 주세요",
+    "noMessages": "아직 메시지가 없습니다",
+    "noMessagesSubtext": "메시지를 보내 채팅을 시작하세요",
+    "inputPlaceholder": "메시지를 입력하세요..."
+  },
+  "demo": {
+    "subtitle": "데모 앱",
+    "gatewayUrl": "게이트웨이 URL",
+    "gatewayUrlPlaceholder": "wss://your-gateway.example.com",
+    "authToken": "인증 토큰 (선택 사항)",
+    "authTokenPlaceholder": "your-auth-token",
+    "configure": "설정",
+    "gatewayConfigured": "게이트웨이 설정 완료",
+    "openChat": "채팅 열기",
+    "resetConfiguration": "설정 초기화",
+    "footerText": "이 데모는 expo-openclaw-chat SDK 사용 방법을 보여줍니다. 게이트웨이 URL을 설정하고 \"채팅 열기\"를 탭하여 시작하세요."
+  }
+}

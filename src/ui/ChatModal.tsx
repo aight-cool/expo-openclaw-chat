@@ -16,6 +16,8 @@ import {
 } from "react-native";
 import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
+import "../i18n"; // Ensure i18n is initialized
 import { ChatList } from "./ChatList";
 import { ChatInput } from "./ChatInput";
 import { ChatEngine, type PendingAttachment } from "../chat/engine";
@@ -43,10 +45,12 @@ export function ChatModal({
   onClose,
   client,
   engine,
-  title = "Chat",
+  title,
   placeholder,
   showImagePicker,
 }: ChatModalProps) {
+  const { t } = useTranslation();
+  const resolvedTitle = title ?? t("chat.title");
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<ChatEngine["messages"]>(
     engine.messages,
@@ -184,10 +188,10 @@ export function ChatModal({
               testID="connection-status"
               style={[styles.statusDot, { backgroundColor: statusColor }]}
             />
-            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.title}>{resolvedTitle}</Text>
           </View>
           <Pressable testID="chat-close-btn" onPress={handleClose} style={styles.closeButton}>
-            <Text style={styles.closeButtonText}>Done</Text>
+            <Text style={styles.closeButtonText}>{t("chat.done")}</Text>
           </Pressable>
         </View>
 
@@ -205,15 +209,15 @@ export function ChatModal({
         {awaitingPairing ? (
           <View testID="pairing-container" style={styles.connectingContainer}>
             <ActivityIndicator size="large" color="#FF9500" />
-            <Text style={styles.connectingText}>Awaiting Approval</Text>
+            <Text style={styles.connectingText}>{t("chat.awaitingApproval")}</Text>
             <Text style={styles.pairingSubtext}>
-              Please approve this device on the gateway
+              {t("chat.awaitingApprovalSubtext")}
             </Text>
           </View>
         ) : isConnecting ? (
           <View testID="connecting-container" style={styles.connectingContainer}>
             <ActivityIndicator size="large" color="#007AFF" />
-            <Text style={styles.connectingText}>Connecting...</Text>
+            <Text style={styles.connectingText}>{t("chat.connecting")}</Text>
           </View>
         ) : (
           <View style={styles.chatContainer}>
@@ -222,9 +226,9 @@ export function ChatModal({
               isStreaming={isStreaming}
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>No messages yet</Text>
+                  <Text style={styles.emptyText}>{t("chat.noMessages")}</Text>
                   <Text style={styles.emptySubtext}>
-                    Send a message to start chatting
+                    {t("chat.noMessagesSubtext")}
                   </Text>
                 </View>
               }
