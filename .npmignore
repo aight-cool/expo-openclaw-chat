@@ -1,0 +1,39 @@
+# Only ship the compiled/source library – nothing else.
+# This is especially important because consumers use `file:` deps,
+# and bun copies the entire package directory (including node_modules,
+# demo app, lockfiles, etc.) when it doesn't respect the `files` field.
+
+node_modules/
+demo/
+scripts/
+coverage/
+.github/
+.git/
+.vscode/
+.idea/
+
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lock
+bun.lockb
+
+screenshot.png
+*.tgz
+*.log
+*.tsbuildinfo
+
+# Tests and test tooling live alongside source in src/ — exclude only tests.
+src/**/__tests__/
+src/**/*.test.ts
+src/**/*.test.tsx
+
+# Babel/jest/tsconfig are build-time only for the library and demo.
+babel.config.js
+jest.config.js
+jest.config.ts
+tsconfig.json
+
+.env
+.env.*
+.DS_Store
