@@ -299,6 +299,63 @@ describe("ChatEngine", () => {
 
       racingEngine.destroy();
     });
+
+    it("does not duplicate when only delta arrives before chatSend resolves (complete arrives after)", async () => {
+      // Reviewer-flagged scenario: delta-only-before-resolve. handleDelta pushes
+      // into streamBuf (not _messages), so the alreadyHandled guard in send()
+      // sees _messages without the asst entry and falls through to append a
+      // placeholder. The architecture must still self-heal because flushImmediate
+      // (and flushBuffer) REPLACE _messages with streamBuf, clobbering the
+      // placeholder before the user can see a duplicate.
+      let resolveSend: ((v: { runId: string }) => void) | null = null;
+      const racingClient = createMockClient({
+        chatSend: jest.fn(
+          () =>
+            new Promise<{ runId: string }>((resolve) => {
+              resolveSend = resolve;
+            }),
+        ) as unknown as GatewayClient["chatSend"],
+      });
+
+      const racingEngine = new ChatEngine(
+        racingClient as unknown as GatewayClient,
+        "test-session",
+      );
+
+      const sendPromise = racingEngine.send("Hello");
+      await new Promise((r) => setImmediate(r));
+
+      racingClient._emitChatEvent({
+        runId: "test-run-id",
+        sessionKey: "test-session",
+        state: "delta",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Hi" }],
+        },
+      } as ChatEventPayload);
+
+      resolveSend!({ runId: "test-run-id" });
+      await sendPromise;
+
+      racingClient._emitChatEvent({
+        runId: "test-run-id",
+        sessionKey: "test-session",
+        state: "complete",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Hi there" }],
+        },
+      } as ChatEventPayload);
+
+      const assistantMsgs = racingEngine.messages.filter(
+        (m) => m.role === "assistant",
+      );
+      expect(assistantMsgs.length).toBe(1);
+      expect(assistantMsgs[0]!.isStreaming).toBe(false);
+
+      racingEngine.destroy();
+    });
   });
 
   describe("event subscriptions", () => {
