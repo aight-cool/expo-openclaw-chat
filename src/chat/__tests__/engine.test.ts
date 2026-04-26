@@ -243,6 +243,62 @@ describe("ChatEngine", () => {
       // Should only have user message + placeholder
       expect(engine.messages.length).toBe(2);
     });
+
+    it("does not append a duplicate placeholder when delta+complete arrive before chatSend resolves", async () => {
+      // Race: WS events for the runId fire while `await chatSend` is still in flight.
+      // Without the alreadyHandled guard, send() would append a second empty
+      // assistant bubble next to the already-finalized reply.
+      let resolveSend: ((v: { runId: string }) => void) | null = null;
+      const racingClient = createMockClient({
+        chatSend: jest.fn(
+          () =>
+            new Promise<{ runId: string }>((resolve) => {
+              resolveSend = resolve;
+            }),
+        ) as unknown as GatewayClient["chatSend"],
+      });
+
+      const racingEngine = new ChatEngine(
+        racingClient as unknown as GatewayClient,
+        "test-session",
+      );
+
+      const sendPromise = racingEngine.send("Hello");
+
+      // Let the user-message append + chatSend invocation settle.
+      await new Promise((r) => setImmediate(r));
+
+      racingClient._emitChatEvent({
+        runId: "test-run-id",
+        sessionKey: "test-session",
+        state: "delta",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Hi" }],
+        },
+      } as ChatEventPayload);
+
+      racingClient._emitChatEvent({
+        runId: "test-run-id",
+        sessionKey: "test-session",
+        state: "complete",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "Hi there" }],
+        },
+      } as ChatEventPayload);
+
+      resolveSend!({ runId: "test-run-id" });
+      await sendPromise;
+
+      const assistantMsgs = racingEngine.messages.filter(
+        (m) => m.role === "assistant",
+      );
+      expect(assistantMsgs.length).toBe(1);
+      expect(assistantMsgs[0]!.isStreaming).toBe(false);
+
+      racingEngine.destroy();
+    });
   });
 
   describe("event subscriptions", () => {
