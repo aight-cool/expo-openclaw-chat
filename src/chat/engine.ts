@@ -199,10 +199,19 @@ export class ChatEngine {
         idempotencyKey: generateIdempotencyKey(),
       });
 
+      // Skip the placeholder if delta/complete events for this runId already
+      // arrived over the WS while we were awaiting chatSend — otherwise we'd
+      // append an empty bubble next to the already-rendered reply.
+      const alreadyHandled = this._messages.some(
+        (m) => m.runId === response.runId && m.role === "assistant",
+      );
+      if (alreadyHandled) {
+        return;
+      }
+
       this._activeRunId = response.runId;
       this._isStreaming = true;
 
-      // Add streaming placeholder
       const placeholder: UIMessage = {
         id: `asst-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
         role: "assistant",
