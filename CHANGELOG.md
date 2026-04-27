@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] - 2026-04-26
+
+### Added
+
+- `headers` option in `GatewayClientOptions` for custom WebSocket upgrade headers (React Native)
+- Connection protection: `disconnect()` is a no-op during mid-handshake to prevent React effect cleanup races
+
+### Fixed
+
+- Skip duplicate placeholder when WS delta/complete events arrive before `chatSend` resolves (#16)
+- Generate random nonce fallback for OpenClaw 2026.3.x device connect compatibility
+- Promote runtime peer dependencies (`@expo/vector-icons`, `react-native-keyboard-controller`, `react-native-safe-area-context`) (#15)
+- Exclude `node_modules/` and `demo/` from `file:` dep copies via `.npmignore` (#15)
+- Align disconnect tests with `_connectInFlight` guard behavior
+
 ## [0.2.3] - 2026-03-08
 
 ### Fixed
