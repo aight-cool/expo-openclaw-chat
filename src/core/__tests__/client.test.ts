@@ -129,13 +129,15 @@ describe("GatewayClient", () => {
   });
 
   describe("disconnect", () => {
-    it("closes the WebSocket", async () => {
+    it("is a no-op while connect handshake is in flight", async () => {
       const client = new GatewayClient("wss://test.example.com");
       client.connect().catch(() => {});
 
+      // disconnect() is intentionally blocked during mid-handshake
+      // to prevent React effect cleanup from killing connections
       client.disconnect();
 
-      expect(client.connectionState).toBe("disconnected");
+      expect(client.connectionState).toBe("connecting");
     });
   });
 
@@ -360,15 +362,17 @@ describe("GatewayClient additional tests", () => {
   });
 
   describe("disconnect during connect", () => {
-    it("rejects pending requests on disconnect", () => {
+    it("is a no-op while connect handshake is in flight", () => {
       const client = new GatewayClient("wss://test.example.com", {
         autoReconnect: false,
       });
       const connectPromise = client.connect();
       connectPromise.catch(() => {});
 
+      // disconnect() is blocked during _connectInFlight to prevent
+      // React effect cleanup from tearing down mid-handshake connections
       client.disconnect();
-      expect(client.connectionState).toBe("disconnected");
+      expect(client.connectionState).toBe("connecting");
     });
   });
 
