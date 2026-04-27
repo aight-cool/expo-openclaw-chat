@@ -65,6 +65,8 @@ export interface GatewayClientOptions {
   platform?: string;
   /** Client ID for gateway registration (default: openclaw-ios) */
   clientId?: string;
+  /** Extra headers to include in the WebSocket upgrade request (React Native only) */
+  headers?: Record<string, string>;
 }
 
 // ─── Event Listener Types ───────────────────────────────────────────────────────
@@ -166,6 +168,10 @@ export class GatewayClient {
   // Pairing flow state
   private awaitingPairing = false;
 
+  // Connection protection: when true, disconnect() is a no-op.
+  // Set during connect(), cleared on hello-ok or connect failure.
+  private _connectInFlight = false;
+
   constructor(url: string, options: GatewayClientOptions = {}) {
     this.url = url;
     this.options = {
@@ -215,6 +221,7 @@ export class GatewayClient {
     }
 
     this.intentionalClose = false;
+    this._connectInFlight = true;
     this.setConnectionState("connecting");
 
     // Load device identity before opening WebSocket
@@ -231,6 +238,10 @@ export class GatewayClient {
    * Cleanly disconnect from the gateway.
    */
   disconnect(): void {
+    // Don't kill a connection that's mid-handshake (race with React effect cleanup)
+    if (this._connectInFlight) {
+      return;
+    }
     this.intentionalClose = true;
     this.awaitingPairing = false;
     this.clearReconnectTimer();
@@ -533,7 +544,19 @@ export class GatewayClient {
     }
 
     try {
-      this.ws = new WebSocket(url);
+      const wsHeaders = this.options.headers;
+      if (wsHeaders && Object.keys(wsHeaders).length > 0) {
+        // React Native WebSocket accepts a 3rd argument for headers.
+        // Standard browser WebSocket does not, so we use a cast here.
+        const WS = WebSocket as unknown as new (
+          url: string,
+          protocols: null,
+          options: { headers: Record<string, string> },
+        ) => WebSocket;
+        this.ws = new WS(url, null, { headers: wsHeaders });
+      } else {
+        this.ws = new WebSocket(url);
+      }
     } catch (err) {
       this.handleConnectFailure(err as Error);
       return;
@@ -637,7 +660,6 @@ export class GatewayClient {
 
   private handleEvent(frame: EventFrame): void {
     const { event, payload, seq } = frame;
-
     // Sequence gap detection
     if (seq != null) {
       if (this.lastSeq >= 0 && seq > this.lastSeq + 1) {
@@ -668,15 +690,17 @@ export class GatewayClient {
         });
         break;
 
-      case GatewayEvents.CHAT:
+      case GatewayEvents.CHAT: {
+        const chatPayload = payload as ChatEventPayload;
         this.chatEventListeners.forEach((cb) => {
           try {
-            cb(payload as ChatEventPayload);
+            cb(chatPayload);
           } catch {
             // Ignore listener errors to avoid breaking event dispatch
           }
         });
         break;
+      }
 
       case GatewayEvents.AGENT:
         this.agentEventListeners.forEach((cb) => {
@@ -739,6 +763,7 @@ export class GatewayClient {
   }
 
   private handleHelloOk(helloOk: HelloOk): void {
+    this._connectInFlight = false;
     this.helloOk = helloOk;
     this.reconnectAttempt = 0;
     this.lastSeq = -1;
@@ -795,9 +820,17 @@ export class GatewayClient {
       const signedAtMs = Date.now();
       const authToken = (auth.token as string) ?? (auth.deviceToken as string);
 
+      // Generate a random nonce if no challenge was received from the gateway.
+      // OpenClaw 2026.3.x requires the nonce field in all device connect params.
+      const nonce =
+        this.challengeNonce ??
+        Array.from(crypto.getRandomValues(new Uint8Array(16)))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+
       // Build signature payload (matches Swift implementation)
       const payload = buildSignaturePayload({
-        nonce: this.challengeNonce ?? undefined,
+        nonce,
         deviceId: identity.deviceId,
         clientId,
         clientMode,
@@ -816,7 +849,7 @@ export class GatewayClient {
           publicKey,
           signature,
           signedAt: signedAtMs,
-          nonce: this.challengeNonce ?? undefined,
+          nonce,
         };
       }
     }
@@ -876,6 +909,7 @@ export class GatewayClient {
   }
 
   private handleConnectFailure(error: Error): void {
+    this._connectInFlight = false;
     if (this.connectPromiseReject) {
       this.connectPromiseReject(error);
       this.connectPromiseResolve = null;
