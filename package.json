@@ -1,6 +1,6 @@
 {
   "name": "expo-openclaw-chat",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Minimal chat SDK for Expo apps to connect to OpenClaw gateway",
   "main": "src/index.ts",
   "types": "src/index.ts",
