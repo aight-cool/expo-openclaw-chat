@@ -111,19 +111,21 @@ describe("GatewayClient", () => {
       connectPromise.catch(() => {}); // Ignore the rejection
     });
 
-    it("rejects if already connecting", async () => {
+    it("attaches overlapping connect() calls to the in-flight handshake", () => {
       const client = new GatewayClient("wss://test.example.com", {
         autoReconnect: false,
       });
 
-      // Start first connect
-      const firstConnect = client.connect();
-      firstConnect.catch(() => {}); // Ignore rejection
+      // Two overlapping connect() calls should both return pending promises
+      // that attach to the same handshake (no synchronous throw on the second).
+      const first = client.connect();
+      const second = client.connect();
+      first.catch(() => {});
+      second.catch(() => {});
 
-      // Second connect should reject
-      await expect(client.connect()).rejects.toThrow("Already connecting");
+      expect(client.connectionState).toBe("connecting");
+      expect(first).not.toBe(second);
 
-      // Clean up
       client.disconnect();
     });
   });

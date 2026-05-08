@@ -156,9 +156,14 @@ export class GatewayClient {
   // Sequence tracking
   private lastSeq = -1;
 
-  // Handshake
-  private connectPromiseResolve: ((value: HelloOk) => void) | null = null;
-  private connectPromiseReject: ((reason: Error) => void) | null = null;
+  // Handshake — every overlapping connect() call pushes its own resolver pair
+  // here. Settled atomically (drain + clear) on hello-ok, connect failure, or
+  // close so callers can't be silently dropped if a later attempt overwrites
+  // the slot.
+  private connectPromisePending: Array<{
+    resolve: (value: HelloOk) => void;
+    reject: (reason: Error) => void;
+  }> = [];
   private challengeNonce: string | null = null;
   private helloOk: HelloOk | null = null;
 
@@ -213,23 +218,41 @@ export class GatewayClient {
    * Connect to the gateway. Resolves with HelloOk on successful handshake.
    */
   async connect(): Promise<HelloOk> {
+    if (this._connectionState === "connected" && this.helloOk) {
+      return this.helloOk;
+    }
+
+    // If already connecting or reconnecting, attach to the in-flight handshake
+    // instead of starting another one. This prevents the autoConnect effect
+    // from creating duplicate connection attempts during React lifecycle
+    // re-runs (e.g. when clientOptions or token deps change mid-handshake).
     if (
-      this._connectionState === "connected" ||
-      this._connectionState === "connecting"
+      this._connectionState === "connecting" ||
+      this._connectionState === "reconnecting"
     ) {
-      throw new Error(`Already ${this._connectionState}`);
+      return new Promise<HelloOk>((resolve, reject) => {
+        this.connectPromisePending.push({ resolve, reject });
+      });
     }
 
     this.intentionalClose = false;
     this._connectInFlight = true;
     this.setConnectionState("connecting");
 
-    // Load device identity before opening WebSocket
-    await this.ensureIdentity();
+    // Load device identity before opening WebSocket. If this throws, any
+    // overlapping connect() callers that queued themselves during the await
+    // would otherwise hang forever and wedge the state machine at
+    // "connecting" — drain them with the same error.
+    try {
+      await this.ensureIdentity();
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      this.handleConnectFailure(error);
+      throw error;
+    }
 
     return new Promise<HelloOk>((resolve, reject) => {
-      this.connectPromiseResolve = resolve;
-      this.connectPromiseReject = reject;
+      this.connectPromisePending.push({ resolve, reject });
       this.openWebSocket();
     });
   }
@@ -264,6 +287,13 @@ export class GatewayClient {
       this.ws = null;
     }
 
+    // Drain any callers that queued via connect() while we were
+    // reconnecting — without this they hang on a connection that's
+    // intentionally going away.
+    if (this.connectPromisePending.length > 0) {
+      this.drainConnectPending((p) => p.reject(new Error("Client disconnected")));
+    }
+
     this.setConnectionState("disconnected");
   }
 
@@ -285,24 +315,29 @@ export class GatewayClient {
         if (this.options.autoReconnect !== false && this._connectionState !== "disconnected") {
           const waitTimeout = 5000;
           let settled = false;
-          const unsub = this.onConnectionStateChange((state) => {
-            if (settled) return;
-            if (state === "connected") {
-              settled = true;
-              unsub();
-              this.request<T>(method, params, timeoutMs).then(resolve, reject);
-            } else if (state === "disconnected") {
-              settled = true;
-              unsub();
-              reject(new Error("Not connected"));
-            }
-          });
-          setTimeout(() => {
+          // Capture the timer so the listener path can clear it; otherwise
+          // each settled-by-listener request still pins a 5s timer + closure
+          // until it fires, which compounds badly during fan-out reconnects.
+          const waitTimer = setTimeout(() => {
             if (settled) return;
             settled = true;
             unsub();
             reject(new Error("Not connected"));
           }, waitTimeout);
+          const unsub = this.onConnectionStateChange((state) => {
+            if (settled) return;
+            if (state === "connected") {
+              settled = true;
+              clearTimeout(waitTimer);
+              unsub();
+              this.request<T>(method, params, timeoutMs).then(resolve, reject);
+            } else if (state === "disconnected") {
+              settled = true;
+              clearTimeout(waitTimer);
+              unsub();
+              reject(new Error("Not connected"));
+            }
+          });
           return;
         }
         return reject(new Error("Not connected"));
@@ -537,6 +572,17 @@ export class GatewayClient {
   // ─── Private: WebSocket Lifecycle ──────────────────────────────────────────
 
   private openWebSocket(): void {
+    // Don't open a new WebSocket if we already have a live one. The React
+    // lifecycle can race with reconnect attempts, leading to multiple
+    // overlapping connect frames and orphaned sockets.
+    if (
+      this.ws &&
+      (this.ws.readyState === WebSocket.OPEN ||
+        this.ws.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
+
     // Auto-add wss:// if protocol is missing
     let url = this.url;
     if (!url.startsWith("wss://") && !url.startsWith("ws://")) {
@@ -563,11 +609,12 @@ export class GatewayClient {
     }
 
     this.ws.onopen = () => {
-      // Wait for either connect.challenge or send connect immediately
-      // The server may or may not send a challenge; set a small timeout
-      // to send connect if no challenge arrives
+      // Wait briefly for an optional connect.challenge from the server. If a
+      // challenge arrives, handleChallenge() sends the connect frame with its
+      // nonce; otherwise we send with a self-generated nonce after the timeout.
+      // The React-lifecycle race that previously killed the WS during this
+      // window is now blocked by the _connectInFlight guard in disconnect().
       this.challengeNonce = null;
-      // Give 2s for an optional challenge, then connect anyway
       setTimeout(() => {
         if (this._connectionState === "connecting" && !this.challengeNonce) {
           this.sendConnectFrame();
@@ -748,8 +795,14 @@ export class GatewayClient {
     this.awaitingPairing = false;
 
     if (payload.decision === "approved") {
-      // Retry connect now that we're approved
-      this.sendConnectFrame();
+      // If the WS is still open we can re-handshake immediately. If it's
+      // already closed (the gateway typically closes with 1008 before
+      // approval lands), let the auto-reconnect cycle that's already in
+      // flight do the next attempt — the device is now approved on the
+      // server, so the next connect will succeed.
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.sendConnectFrame();
+      }
     } else {
       // Rejected - fail the connection
       this.handleConnectFailure(new Error("Device pairing was denied"));
@@ -763,10 +816,12 @@ export class GatewayClient {
   }
 
   private handleHelloOk(helloOk: HelloOk): void {
-    this._connectInFlight = false;
     this.helloOk = helloOk;
     this.reconnectAttempt = 0;
     this.lastSeq = -1;
+    // Clear any pending reconnect timer — a stale timer from a prior
+    // failed attempt could otherwise stomp on this fresh connection.
+    this.clearReconnectTimer();
 
     // Configure tick interval from policy
     if (helloOk.policy?.tickIntervalMs) {
@@ -776,11 +831,27 @@ export class GatewayClient {
     this.startTickMonitor();
     this.setConnectionState("connected");
 
-    // Resolve the connect() promise
-    if (this.connectPromiseResolve) {
-      this.connectPromiseResolve(helloOk);
-      this.connectPromiseResolve = null;
-      this.connectPromiseReject = null;
+    this.drainConnectPending((p) => p.resolve(helloOk));
+  }
+
+  /**
+   * Settle every pending connect() caller atomically. Captures the queue,
+   * clears it, then invokes each callback with throws isolated so one bad
+   * listener can't strand the others. Called from hello-ok (resolve), connect
+   * failure (reject), and close (reject).
+   */
+  private drainConnectPending(
+    settle: (p: { resolve: (v: HelloOk) => void; reject: (e: Error) => void }) => void,
+  ): void {
+    this._connectInFlight = false;
+    const pending = this.connectPromisePending;
+    this.connectPromisePending = [];
+    for (const p of pending) {
+      try {
+        settle(p);
+      } catch {
+        // Ignore listener throws — other callers must still be settled.
+      }
     }
   }
 
@@ -909,13 +980,7 @@ export class GatewayClient {
   }
 
   private handleConnectFailure(error: Error): void {
-    this._connectInFlight = false;
-    if (this.connectPromiseReject) {
-      this.connectPromiseReject(error);
-      this.connectPromiseResolve = null;
-      this.connectPromiseReject = null;
-    }
-
+    this.drainConnectPending((p) => p.reject(error));
     this.setConnectionState("disconnected");
   }
 
@@ -936,7 +1001,11 @@ export class GatewayClient {
       return;
     }
 
-    // Gateway closed with 1008 "pairing required" — treat like NOT_PAIRED
+    // Gateway closed with 1008 "pairing required" — emit event for UI and
+    // fall through to auto-reconnect. On hosted gateways the server runs a
+    // background loop that approves new devices within a few seconds, so a
+    // backoff retry will succeed once approval lands. On self-hosted gateways
+    // the user approves manually; auto-reconnect keeps trying in the meantime.
     if (
       code === 1008 &&
       reason.toLowerCase().includes("pairing") &&
@@ -946,18 +1015,19 @@ export class GatewayClient {
       this.emitEvent("pairing.required", {
         deviceId: this.deviceIdentity?.deviceId,
       });
-      // Don't reject connect promise — wait for user to get approved,
-      // then the UI will retry the connection
-      return;
+      // Don't return — let auto-reconnect schedule the retry below.
     }
 
-    // If we were still in the initial connect(), reject it
-    if (this.connectPromiseReject) {
-      // Don't reject — we'll try reconnecting
+    // Reject any in-flight connect() promises so callers don't hang. The
+    // auto-reconnect path will create fresh promises on the next attempt —
+    // this just unblocks anything queued against the dying socket.
+    if (this.connectPromisePending.length > 0) {
+      const closeError = new Error(
+        `WebSocket closed during connect: ${code} ${reason}`,
+      );
+      this.drainConnectPending((p) => p.reject(closeError));
       if (!this.options.autoReconnect) {
-        this.handleConnectFailure(
-          new Error(`WebSocket closed during connect: ${code} ${reason}`),
-        );
+        this.setConnectionState("disconnected");
         return;
       }
     }
@@ -1000,20 +1070,19 @@ export class GatewayClient {
     this.setConnectionState("connecting");
     this.challengeNonce = null;
 
-    // Wrap the reconnect in its own promise tracking
-    const prevResolve = this.connectPromiseResolve;
-
-    // Keep original promise callbacks if we're reconnecting from a failed initial connect
-    if (!prevResolve) {
-      // Just reconnecting after a successful session that dropped
-      this.connectPromiseResolve = () => {}; // no-op, state already updated in handleHelloOk
-      this.connectPromiseReject = () => {
-        // Reconnect failure — try again
-        if (!this.intentionalClose && this.options.autoReconnect) {
-          this.setConnectionState("reconnecting");
-          this.scheduleReconnect();
-        }
-      };
+    // If no caller is waiting on a connect() (we're just reconnecting after a
+    // dropped session), seed an internal pending entry whose reject schedules
+    // another retry. handleHelloOk will drain it as a no-op resolve.
+    if (this.connectPromisePending.length === 0) {
+      this.connectPromisePending.push({
+        resolve: () => {},
+        reject: () => {
+          if (!this.intentionalClose && this.options.autoReconnect) {
+            this.setConnectionState("reconnecting");
+            this.scheduleReconnect();
+          }
+        },
+      });
     }
 
     this.openWebSocket();
