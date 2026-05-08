@@ -239,8 +239,17 @@ export class GatewayClient {
     this._connectInFlight = true;
     this.setConnectionState("connecting");
 
-    // Load device identity before opening WebSocket
-    await this.ensureIdentity();
+    // Load device identity before opening WebSocket. If this throws, any
+    // overlapping connect() callers that queued themselves during the await
+    // would otherwise hang forever and wedge the state machine at
+    // "connecting" — drain them with the same error.
+    try {
+      await this.ensureIdentity();
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      this.handleConnectFailure(error);
+      throw error;
+    }
 
     return new Promise<HelloOk>((resolve, reject) => {
       this.connectPromisePending.push({ resolve, reject });
@@ -276,6 +285,13 @@ export class GatewayClient {
         // ignore close errors
       }
       this.ws = null;
+    }
+
+    // Drain any callers that queued via connect() while we were
+    // reconnecting — without this they hang on a connection that's
+    // intentionally going away.
+    if (this.connectPromisePending.length > 0) {
+      this.drainConnectPending((p) => p.reject(new Error("Client disconnected")));
     }
 
     this.setConnectionState("disconnected");
@@ -800,7 +816,6 @@ export class GatewayClient {
   }
 
   private handleHelloOk(helloOk: HelloOk): void {
-    this._connectInFlight = false;
     this.helloOk = helloOk;
     this.reconnectAttempt = 0;
     this.lastSeq = -1;
@@ -828,6 +843,7 @@ export class GatewayClient {
   private drainConnectPending(
     settle: (p: { resolve: (v: HelloOk) => void; reject: (e: Error) => void }) => void,
   ): void {
+    this._connectInFlight = false;
     const pending = this.connectPromisePending;
     this.connectPromisePending = [];
     for (const p of pending) {
@@ -964,7 +980,6 @@ export class GatewayClient {
   }
 
   private handleConnectFailure(error: Error): void {
-    this._connectInFlight = false;
     this.drainConnectPending((p) => p.reject(error));
     this.setConnectionState("disconnected");
   }
@@ -1007,7 +1022,6 @@ export class GatewayClient {
     // auto-reconnect path will create fresh promises on the next attempt —
     // this just unblocks anything queued against the dying socket.
     if (this.connectPromisePending.length > 0) {
-      this._connectInFlight = false;
       const closeError = new Error(
         `WebSocket closed during connect: ${code} ${reason}`,
       );
