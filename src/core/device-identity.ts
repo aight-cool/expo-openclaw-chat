@@ -12,8 +12,12 @@ import { sha256, sha512 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { storage } from "./storage";
 
-// Configure ed25519 to use sync sha512 (avoids crypto.subtle requirement)
-ed.hashes.sha512 = (message: Uint8Array): Uint8Array => sha512(message);
+// Configure ed25519 to use sync sha512 (avoids crypto.subtle requirement).
+// Cast bypasses a Uint8Array<ArrayBufferLike> mismatch against @noble/ed25519
+// v3's Bytes type that surfaces under consumers' stricter TS lib settings.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(ed.hashes as any).sha512 = (message: Uint8Array): Uint8Array =>
+  sha512(message);
 
 const STORAGE_KEY = "openclaw_device_identity";
 const STORAGE_KEY_PUBLIC = "openclaw_device_identity_public";
