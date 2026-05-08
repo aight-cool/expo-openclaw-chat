@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] - 2026-05-08
+
+### Fixed
+
+- Drain overlapping `connect()` callers atomically via a pending-resolver array; second call now attaches to the in-flight handshake instead of throwing `Already connecting` (AIG-162, #18)
+- `handleClose()` 1008 "pairing required" branch falls through to auto-reconnect (was: early-return → state stuck at `connecting` forever); pending promises are rejected on close so callers don't hang
+- `openWebSocket()` early-returns if a live socket already exists, preventing duplicate connect frames during reconnect/lifecycle races
+- `handleHelloOk()` clears the pending reconnect timer so a stale retry can't stomp on a freshly-handshook connection
+- `request()` retry path captures and clears the 5s wait timer when settled by the state listener (closure leak)
+- `handlePairResolved()` skips `sendConnectFrame()` when the WS isn't open — gateway closes 1008 before approval lands, so the next auto-reconnect attempt handles the now-approved device identity
+- `connect()` wraps `ensureIdentity()` in try/catch so a crypto/storage failure during identity load can't strand callers that queued during the await
+- `disconnect()` drains `connectPromisePending` so callers attached during a `reconnecting` phase don't hang on an intentional disconnect
+
 ## [0.2.4] - 2026-04-26
 
 ### Added
