@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.7] - 2026-05-15
+
+### Fixed
+
+- Advertise `minProtocol: 3, maxProtocol: 4` in the connect handshake so the SDK negotiates with both v3 (OpenClaw ≤ 2026.5.4) and v4 (OpenClaw ≥ 2026.5.12) gateways. Previously both bounds were collapsed to `GATEWAY_PROTOCOL_VERSION` (3), causing v4 gateways to reject the handshake with `protocol mismatch (expectedProtocol: 4)`. v4 keeps `message` as the cumulative assistant snapshot, so existing snapshot-based consumers continue to work without changes (#22)
+
 ## [0.2.6] - 2026-05-08
 
 ### Fixed
