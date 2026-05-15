@@ -6,7 +6,6 @@
  */
 
 import {
-  GATEWAY_PROTOCOL_VERSION,
   type RequestFrame,
   type ResponseFrame,
   type EventFrame,
@@ -926,8 +925,12 @@ export class GatewayClient {
     }
 
     const params: ConnectParams = {
-      minProtocol: GATEWAY_PROTOCOL_VERSION,
-      maxProtocol: GATEWAY_PROTOCOL_VERSION,
+      // Advertise a range so we connect to both v3 (OpenClaw ≤ 2026.5.4) and
+      // v4 (OpenClaw ≥ 2026.5.12) gateways. The engine reads the cumulative
+      // `message` snapshot, which v4 still emits alongside deltaText/replace,
+      // so the v4 frame additions are ignored harmlessly until clients opt in.
+      minProtocol: 3,
+      maxProtocol: 4,
       client: {
         id: clientId,
         version: appVersion ?? "1.0.0",
