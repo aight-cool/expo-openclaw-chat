@@ -688,9 +688,18 @@ export class GatewayClient {
           this._connectionState === "connecting"
         ) {
           this.awaitingPairing = true;
-          // Emit event so UI can show pairing sheet
+          // Emit event so UI can show pairing sheet. The gateway includes
+          // the pending pairing requestId in the error details — forward it
+          // so UIs can render a runnable `devices approve <requestId>`.
+          const details = errorShape.details as
+            | { requestId?: unknown }
+            | undefined;
           this.emitEvent("pairing.required", {
             deviceId: this.deviceIdentity?.deviceId,
+            requestId:
+              typeof details?.requestId === "string"
+                ? details.requestId
+                : undefined,
           });
           // Don't reject the connect promise yet - we'll resolve/reject
           // when device.pair.resolved arrives
